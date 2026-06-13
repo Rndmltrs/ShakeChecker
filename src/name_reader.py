@@ -21,10 +21,17 @@ from battle_reader import BarReading, NameCalibration
 # Cut the OCR string at the level marker ("Lv", "Lu", "Iv" misreads) so only
 # the name remains; everything after (level number, gender, caught ball) is noise.
 _LEVEL_MARKER = re.compile(r"\b[li][vu]\b", re.IGNORECASE)
+# The level number directly follows the marker: "Lv. 43".
+_LEVEL_NUMBER = re.compile(r"\b[li][vu]\b\.?\s*(\d{1,3})", re.IGNORECASE)
 
 
 def clean_ocr_text(raw: str) -> str:
     return _LEVEL_MARKER.split(raw, maxsplit=1)[0].strip()
+
+
+def parse_level(raw: str) -> int | None:
+    m = _LEVEL_NUMBER.search(raw)
+    return int(m.group(1)) if m else None
 
 
 def match_species_name(raw_text: str, names: list[str], min_score: float) -> str | None:
@@ -61,8 +68,9 @@ class NameReader:
         return " ".join(text for _box, text, _score in result)
 
     def read(self, frame_bgr: np.ndarray, bar: BarReading) -> dict | None:
-        """Species dict for the enemy whose bar is `bar`, or None if the name
-        could not be read/matched."""
+        """Species dict (plus the encounter's "level") for the enemy whose bar
+        is `bar`, or None if the name could not be read/matched. The returned
+        dict is a copy; the vendored species data is not mutated."""
         c = self._cal
         y0, y1 = bar.y + c.dy0, bar.y + c.dy1
         x0, x1 = bar.x + c.dx0, bar.x + c.dx1
@@ -72,5 +80,8 @@ class NameReader:
         if crop.size == 0:
             return None
         up = cv2.resize(crop, None, fx=c.upscale, fy=c.upscale, interpolation=cv2.INTER_CUBIC)
-        name = match_species_name(self._run_ocr(up), self._names, c.min_match_score)
-        return self._by_name.get(name) if name else None
+        raw = self._run_ocr(up)
+        name = match_species_name(raw, self._names, c.min_match_score)
+        if not name:
+            return None
+        return {**self._by_name[name], "level": parse_level(raw)}

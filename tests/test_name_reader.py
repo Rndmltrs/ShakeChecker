@@ -13,7 +13,7 @@ import cv2
 import pytest
 
 from battle_reader import load_calibration, read_enemy_bars
-from name_reader import NameReader, clean_ocr_text, match_species_name
+from name_reader import NameReader, clean_ocr_text, match_species_name, parse_level
 
 ROOT = Path(__file__).parent.parent
 FIXTURES = ROOT / "fixtures"
@@ -26,6 +26,13 @@ def test_clean_ocr_text_strips_level_and_icons():
     assert clean_ocr_text("Cascoon Lv. 11 $ e") == "Cascoon"
     assert clean_ocr_text("Onix Lv. 43  e") == "Onix"
     assert clean_ocr_text("Mr. Mime Lv. 5") == "Mr. Mime"
+
+
+def test_parse_level():
+    assert parse_level("Cascoon Lv. 11 $ e") == 11
+    assert parse_level("Onix Lv. 43  e") == 43
+    assert parse_level("Tentacool Lv. 24 8 0") == 24
+    assert parse_level("no level here") is None
 
 
 @pytest.mark.parametrize(

@@ -42,3 +42,29 @@ const z = (y / 65536) * (y / 65536) * (y / 65536) * (y / 65536) * 100
 
 The Bulbasaur case is the documented reference from pokemmohub.com (11.8%,
 CLAUDE.md) and is pinned in `tests/test_catch_calc.py`.
+
+## Conditional ball multipliers (PokeMMO, not the flat Hub model)
+
+The Hub models every ball as a flat multiplier. PokeMMO actually applies
+conditions — verified against the PokeMMO Wiki and the PokeMMO-specific catch
+calculator `c4vv/CatchCalc` (`pokeballs.js`). Ported into `catch_calc.py`
+(`BALL_RULES`) / `src/data/balls.json`:
+
+| Ball | Multiplier | Condition |
+|---|---|---|
+| Quick | 5.0 else 1.0 | first turn only (`turns_completed == 0`) |
+| Timer | `1 + min(3, turns_completed*0.3)` (max 4) | ramps per completed turn |
+| Net | 3.5 else 1.0 | enemy is Water or Bug type |
+| Nest | `min(max(7 - 0.2*(level-1), 1), 4)` | low enemy level |
+| Dusk | 2.5 else 1.0 | night / cave |
+| Luxury | 1.0 | (Hub had 2.0 — wrong; Luxury is friendship, not catch) |
+| Repeat | 1.0 (placeholder) | CatchCalc uses a chain count; unconfirmed, left at 1.0 |
+| Poke/Great/Ultra/Heal/Dream | 1 / 1.5 / 2 / 1.25 / 4 | flat |
+
+Turn-dependent balls (Quick, Timer) need the battle turn counter; until it
+lands the app assumes turn 1 (`turns_completed = 0`), which is correct for the
+first turn (Quick ×5, Timer ×1). Dusk (night/cave) and Repeat (caught-before)
+depend on data that arrives in milestone 4 and currently resolve to ×1.
+
+Sources: [PokeMMO Wiki — Quick Ball](https://pokemmo.shoutwiki.com/wiki/Quick_Ball),
+[c4vv/CatchCalc](https://github.com/c4vv/CatchCalc).

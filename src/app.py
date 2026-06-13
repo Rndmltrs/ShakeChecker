@@ -27,7 +27,7 @@ from battle_reader import (
     load_calibration,
     read_battle,
 )
-from catch_calc import catch_probability
+from catch_calc import BattleContext, ball_multiplier, catch_probability
 from name_reader import NameReader
 from window_capture import (
     WINDOW_TITLE,
@@ -68,12 +68,27 @@ def load_status_rates() -> dict[str, float]:
     return json.loads((DATA / "status_rates.json").read_text("utf-8"))["rates"]
 
 
-def lookup_catch_rate(species: str) -> int:
-    entries = json.loads((DATA / "species_core.json").read_text("utf-8"))
+def lookup_species(name: str) -> dict:
+    entries = json.loads(SPECIES_PATH.read_text("utf-8"))
     for e in entries:
-        if e["name"].lower() == species.lower():
-            return e["catch_rate"]
-    raise SystemExit(f"unknown species: {species!r}")
+        if e["name"].lower() == name.lower():
+            return e
+    raise SystemExit(f"unknown species: {name!r}")
+
+
+def battle_context(
+    enemy: dict, turns_completed: int = 0, dusk_active: bool = False
+) -> BattleContext:
+    """Build the conditional-ball context from a resolved enemy dict.
+
+    turns_completed defaults to 0 (turn 1) until the turn counter lands, so
+    Quick Ball reads x5 and Timer Ball x1 — both correct for the first turn."""
+    return BattleContext(
+        turns_completed=turns_completed,
+        enemy_types=tuple(enemy.get("types") or ()),
+        enemy_level=enemy.get("level") or 1,
+        dusk_active=dusk_active,
+    )
 
 
 def format_line(name: str, hp_pct: float, status: str, probs: list[tuple[str, float]]) -> str:
@@ -82,17 +97,34 @@ def format_line(name: str, hp_pct: float, status: str, probs: list[tuple[str, fl
 
 
 def ball_probs(
-    hp_pct: float, base_rate: int, status_rate: float, balls: list[dict]
+    hp_pct: float, base_rate: int, status_rate: float, balls: list[dict], ctx: BattleContext
 ) -> list[tuple[str, float]]:
     return [
-        (b["name"], catch_probability(hp_pct / 100.0, base_rate, b["rate"], status_rate))
+        (
+            b["name"],
+            catch_probability(hp_pct / 100.0, base_rate, ball_multiplier(b, ctx), status_rate),
+        )
         for b in balls
     ]
 
 
+def resolve_enemy(
+    species_override: dict | None,
+    name_reader: NameReader | None,
+    frame_bgr,
+    bar,
+) -> dict | None:
+    """Enemy dict ({name, catch_rate, types, level}) for a bar: the override if
+    given, else OCR. None when the name can't be read."""
+    if species_override is not None:
+        return species_override
+    assert name_reader is not None
+    return name_reader.read(frame_bgr, bar)
+
+
 def analyze_image(
     image_path: str,
-    species_override: tuple[str, int] | None,
+    species_override: dict | None,
     status_override: str | None,
     cal: Calibration,
 ) -> None:
@@ -115,29 +147,16 @@ def analyze_image(
         print("  -> horde/double battle: ignored in v1 (overlay would stay hidden)")
     for i, bar in enumerate(reading.bars):
         status = status_override or bar.status.value
-        label, rate = resolve_species(species_override, name_reader, frame, bar)
+        enemy = resolve_enemy(species_override, name_reader, frame, bar)
+        label = enemy["name"] if enemy else "?"
         tag = f"bar {i}: " if len(reading.bars) > 1 else ""
         print(
             f"  {tag}{label}  HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}"
         )
-        if reading.state is BattleState.SINGLE and rate is not None:
-            probs = ball_probs(bar.hp_pct, rate, status_rates[status], balls)
+        if reading.state is BattleState.SINGLE and enemy is not None:
+            ctx = battle_context(enemy)
+            probs = ball_probs(bar.hp_pct, enemy["catch_rate"], status_rates[status], balls, ctx)
             print("  " + format_line(label, bar.hp_pct, status, probs))
-
-
-def resolve_species(
-    species_override: tuple[str, int] | None,
-    name_reader: NameReader | None,
-    frame_bgr,
-    bar,
-) -> tuple[str, int | None]:
-    """(label, catch_rate) for a bar: the override if given, else OCR. Returns
-    ('?', None) when the name can't be read."""
-    if species_override is not None:
-        return species_override
-    assert name_reader is not None
-    sp = name_reader.read(frame_bgr, bar)
-    return (sp["name"], sp["catch_rate"]) if sp else ("?", None)
 
 
 def list_windows() -> None:
@@ -171,9 +190,7 @@ def list_windows() -> None:
         print(f"  selected client rect: {get_client_rect(picked)}")
 
 
-def run(
-    species_override: tuple[str, int] | None, status_override: str | None, cal: Calibration
-) -> None:
+def run(species_override: dict | None, status_override: str | None, cal: Calibration) -> None:
     balls = load_balls()
     status_rates = load_status_rates()
     name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
@@ -182,9 +199,9 @@ def run(
     hwnd: int | None = None
     last_seen_battle = 0.0
     last_line = ""
-    cached: tuple[str, int] | None = None  # species for the current battle
+    cached: dict | None = None  # enemy for the current battle
 
-    species_src = f"override {species_override[0]}" if species_override else "OCR from screen"
+    species_src = f"override {species_override['name']}" if species_override else "OCR from screen"
     status_src = f"override {status_override}" if status_override else "detected from screen"
     print(f"species: {species_src}, status: {status_src}")
     print("waiting for PokeMMO window...")
@@ -230,15 +247,17 @@ def run(
                     assert name_reader is not None
                     sp = name_reader.read(frame, bar)
                     if sp is not None:
-                        cached = (sp["name"], sp["catch_rate"])
-                        print(f"identified: {cached[0]} (catch rate {cached[1]})")
+                        cached = sp
+                        print(f"identified: {sp['name']} (catch rate {sp['catch_rate']})")
 
                 if cached is None:
                     line = f"{'?':12.12s} HP {bar.hp_pct:5.1f}% [{status}]  (identifying...)"
                 else:
-                    label, rate = cached
-                    probs = ball_probs(bar.hp_pct, rate, status_rates[status], balls)
-                    line = format_line(label, bar.hp_pct, status, probs)
+                    ctx = battle_context(cached)
+                    probs = ball_probs(
+                        bar.hp_pct, cached["catch_rate"], status_rates[status], balls, ctx
+                    )
+                    line = format_line(cached["name"], bar.hp_pct, status, probs)
                 if line != last_line:
                     print(line)
                     last_line = line
@@ -286,11 +305,11 @@ def main() -> None:
         return
 
     # species is read from the screen by default; --species/--rate override it
-    species_override: tuple[str, int] | None = None
+    species_override: dict | None = None
     if args.species is not None:
-        species_override = (args.species, lookup_catch_rate(args.species))
+        species_override = lookup_species(args.species)
     elif args.rate is not None:
-        species_override = (f"rate {args.rate}", args.rate)
+        species_override = {"name": f"rate {args.rate}", "catch_rate": args.rate, "types": []}
 
     cal = load_calibration(ROOT / "calibration.toml")
 
