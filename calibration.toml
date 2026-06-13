@@ -115,6 +115,18 @@ right = 0.55
 dark_val_max = 90
 min_dark_frac = 0.90
 
+[chat]
+# Battle chat log, bottom-left of the WINDOW. Unlike the battle viewport (which
+# is letterboxed and shifts with window size) the chat sits at a stable window
+# position, so a fractional crop is reliable. It prints "Turn N started!", which
+# the turn counter reads via OCR. Verified legible on full_health_no_status
+# (shows "Turn 2 started!"). Requires the battle chat to be visible.
+top = 0.90
+bottom = 0.985
+left = 0.0
+right = 0.40
+upscale = 2
+
 [name]
 # Enemy name region: right of the status badge, above the bar. Relative to the
 # bar fill-start x and mid-row y (fixed-size UI). The crop spans name + "Lv. NN"

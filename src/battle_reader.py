@@ -140,11 +140,20 @@ class BattleUiCalibration(BaseModel):
     min_dark_frac: float
 
 
+class ChatCalibration(BaseModel):
+    top: float
+    bottom: float
+    left: float
+    right: float
+    upscale: int
+
+
 class Calibration(BaseModel):
     hp_bar: HpBarCalibration
     status: StatusCalibration
     name: NameCalibration
     battle_ui: BattleUiCalibration
+    chat: ChatCalibration
 
 
 def load_calibration(path: Path | str) -> Calibration:

@@ -17,6 +17,7 @@ import numpy as np
 from rapidfuzz import fuzz, process
 
 from battle_reader import BarReading, NameCalibration
+from ocr_engine import run_ocr
 
 # Cut the OCR string at the level marker ("Lv", "Lu", "Iv" misreads) so only
 # the name remains; everything after (level number, gender, caught ball) is noise.
@@ -55,17 +56,6 @@ class NameReader:
         species = json.loads(Path(species_path).read_text("utf-8"))
         self._names = [s["name"] for s in species]
         self._by_name = {s["name"]: s for s in species}
-        self._ocr = None  # lazy: avoid loading ONNX models until first use
-
-    def _run_ocr(self, image: np.ndarray) -> str:
-        if self._ocr is None:
-            from rapidocr_onnxruntime import RapidOCR
-
-            self._ocr = RapidOCR()
-        result, _ = self._ocr(image)
-        if not result:
-            return ""
-        return " ".join(text for _box, text, _score in result)
 
     def read(self, frame_bgr: np.ndarray, bar: BarReading) -> dict | None:
         """Species dict (plus the encounter's "level") for the enemy whose bar
@@ -80,7 +70,7 @@ class NameReader:
         if crop.size == 0:
             return None
         up = cv2.resize(crop, None, fx=c.upscale, fy=c.upscale, interpolation=cv2.INTER_CUBIC)
-        raw = self._run_ocr(up)
+        raw = " ".join(run_ocr(up))
         name = match_species_name(raw, self._names, c.min_match_score)
         if not name:
             return None

@@ -20,15 +20,18 @@ import sys
 import time
 from pathlib import Path
 
+from battle_log import read_turn_number
 from battle_reader import (
     BattleState,
     Calibration,
+    Status,
     is_battle_ui_present,
     load_calibration,
     read_battle,
 )
 from catch_calc import BattleContext, ball_multiplier, catch_probability
 from name_reader import NameReader
+from turn_tracker import TurnTracker
 from window_capture import (
     WINDOW_TITLE,
     WindowCapture,
@@ -52,6 +55,9 @@ BATTLE_FRAME_S = 0.2  # ~5 fps
 # which is stable through intro/animations. Only end the battle once that panel
 # has been gone continuously for this long (covers fade-out transitions).
 BATTLE_END_GRACE_S = 1.5
+# Chat OCR is comparatively expensive; turns change slowly, so poll it at most
+# this often rather than every battle frame.
+CHAT_OCR_INTERVAL_S = 1.0
 
 
 class AppState(enum.Enum):
@@ -156,9 +162,12 @@ def analyze_image(
             f"  {tag}{label}  HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}"
         )
         if reading.state is BattleState.SINGLE and enemy is not None:
-            ctx = battle_context(enemy)
+            turn = read_turn_number(frame, cal.chat)
+            turns_completed = turn - 1 if turn else 0
+            ctx = battle_context(enemy, turns_completed=turns_completed)
             probs = ball_probs(bar.hp_pct, enemy["catch_rate"], status_rates[status], balls, ctx)
-            print("  " + format_line(label, bar.hp_pct, status, probs))
+            turn_note = f"  (chat turn {turn})" if turn else ""
+            print("  " + format_line(label, bar.hp_pct, status, probs) + turn_note)
 
 
 def list_windows() -> None:
@@ -200,8 +209,10 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
     state = AppState.WAITING
     hwnd: int | None = None
     last_seen_battle = 0.0
+    last_chat_ocr = 0.0
     last_line = ""
     cached: dict | None = None  # enemy for the current battle
+    turns = TurnTracker()
 
     species_src = f"override {species_override['name']}" if species_override else "OCR from screen"
     status_src = f"override {status_override}" if status_override else "detected from screen"
@@ -237,6 +248,8 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
                 state = AppState.BATTLE
                 cached = None  # new battle: re-identify the species
                 last_line = ""
+                turns.reset()
+                last_chat_ocr = 0.0
                 print("battle detected")
 
             reading = read_battle(frame, cal)
@@ -252,10 +265,19 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
                         cached = sp
                         print(f"identified: {sp['name']} (catch rate {sp['catch_rate']})")
 
+                # poll the chat turn number (throttled) and update the counter
+                if now - last_chat_ocr >= CHAT_OCR_INTERVAL_S:
+                    turns.observe(read_turn_number(frame, cal.chat), bar.status is Status.SLP)
+                    last_chat_ocr = now
+
                 if cached is None:
                     line = f"{'?':12.12s} HP {bar.hp_pct:5.1f}% [{status}]  (identifying...)"
                 else:
-                    ctx = battle_context(cached)
+                    ctx = battle_context(
+                        cached,
+                        turns_completed=turns.turns_completed,
+                        turns_asleep=turns.turns_asleep,
+                    )
                     probs = ball_probs(
                         bar.hp_pct, cached["catch_rate"], status_rates[status], balls, ctx
                     )
