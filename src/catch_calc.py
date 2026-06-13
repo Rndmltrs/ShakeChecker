@@ -23,9 +23,11 @@ class BattleContext:
     """Everything a conditional ball rule needs about the current battle.
 
     `turns_completed` is 0 during the first turn (so Quick Ball is active and
-    Timer Ball is x1), then 1 after the first turn resolves, etc."""
+    Timer Ball is x1), then 1 after the first turn resolves, etc.
+    `turns_asleep` is how many turns the enemy has been asleep (Dream Ball)."""
 
     turns_completed: int = 0
+    turns_asleep: int = 0
     enemy_types: tuple[str, ...] = ()
     enemy_level: int = 1
     dusk_active: bool = False  # night or cave (Dusk Ball condition)
@@ -52,6 +54,11 @@ def _dusk(ctx: BattleContext) -> float:
     return 2.5 if ctx.dusk_active else 1.0
 
 
+def _dream(ctx: BattleContext) -> float:
+    # pokemmo.help: scales with turns asleep, 0-3 turns -> 1x..4x.
+    return min(4.0, 1.0 + ctx.turns_asleep)
+
+
 # Conditional ball rules, keyed by the "rule" field in balls.json.
 BALL_RULES: dict[str, Callable[[BattleContext], float]] = {
     "quick": _quick,
@@ -59,6 +66,7 @@ BALL_RULES: dict[str, Callable[[BattleContext], float]] = {
     "net": _net,
     "nest": _nest,
     "dusk": _dusk,
+    "dream": _dream,
 }
 
 

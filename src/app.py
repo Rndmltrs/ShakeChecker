@@ -77,14 +77,16 @@ def lookup_species(name: str) -> dict:
 
 
 def battle_context(
-    enemy: dict, turns_completed: int = 0, dusk_active: bool = False
+    enemy: dict, turns_completed: int = 0, turns_asleep: int = 0, dusk_active: bool = False
 ) -> BattleContext:
     """Build the conditional-ball context from a resolved enemy dict.
 
-    turns_completed defaults to 0 (turn 1) until the turn counter lands, so
-    Quick Ball reads x5 and Timer Ball x1 — both correct for the first turn."""
+    turns_completed/turns_asleep default to 0 until the turn counter lands, so
+    Quick Ball reads x5, Timer Ball x1 and Dream Ball x1 — all correct for the
+    first turn with no accumulated sleep."""
     return BattleContext(
         turns_completed=turns_completed,
+        turns_asleep=turns_asleep,
         enemy_types=tuple(enemy.get("types") or ()),
         enemy_level=enemy.get("level") or 1,
         dusk_active=dusk_active,

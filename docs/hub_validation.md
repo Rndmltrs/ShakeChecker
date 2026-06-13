@@ -57,13 +57,20 @@ calculator `c4vv/CatchCalc` (`pokeballs.js`). Ported into `catch_calc.py`
 | Net | 3.5 else 1.0 | enemy is Water or Bug type |
 | Nest | `min(max(7 - 0.2*(level-1), 1), 4)` | low enemy level |
 | Dusk | 2.5 else 1.0 | night / cave |
+| Dream | `min(4, 1 + turns_asleep)` | scales with turns the enemy slept (0-3 → 1x-4x) |
 | Luxury | 1.0 | (Hub had 2.0 — wrong; Luxury is friendship, not catch) |
 | Repeat | 1.0 (placeholder) | CatchCalc uses a chain count; unconfirmed, left at 1.0 |
-| Poke/Great/Ultra/Heal/Dream | 1 / 1.5 / 2 / 1.25 / 4 | flat |
+| Poke/Great/Ultra/Heal | 1 / 1.5 / 2 / 1.25 | flat |
 
-Turn-dependent balls (Quick, Timer) need the battle turn counter; until it
-lands the app assumes turn 1 (`turns_completed = 0`), which is correct for the
-first turn (Quick ×5, Timer ×1). Dusk (night/cave) and Repeat (caught-before)
+The flat balls and the core formula are confirmed against
+pokemmo.help/capture-chance — Roselia (rate 150, 50% HP, no status): Poke
+39.21% (we compute 39.22%, a 65535-vs-65536 rounding artefact), Great 58.82%.
+
+Turn-dependent balls (Quick, Timer, Dream) need the battle turn / sleep-turn
+counter; until it lands the app assumes turn 1 with no accrued sleep
+(`turns_completed = turns_asleep = 0`), which is correct for the first turn
+(Quick ×5, Timer ×1, Dream ×1). The Hub's flat Dream ×4 was wrong — Dream is
+×1 against a non-sleeping target. Dusk (night/cave) and Repeat (caught-before)
 depend on data that arrives in milestone 4 and currently resolve to ×1.
 
 Sources: [PokeMMO Wiki — Quick Ball](https://pokemmo.shoutwiki.com/wiki/Quick_Ball),

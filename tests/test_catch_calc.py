@@ -90,7 +90,14 @@ def test_flat_balls_ignore_context():
     assert mult("great", ctx) == 1.5
     assert mult("ultra", ctx) == 2.0
     assert mult("heal", ctx) == 1.25
-    assert mult("dream", ctx) == 4.0
+
+
+def test_dream_ball_scales_with_sleep_turns():
+    # pokemmo.help: 0-3 turns asleep -> 1x..4x. NOT a flat 4x.
+    assert mult("dream", BattleContext(turns_asleep=0)) == 1.0
+    assert mult("dream", BattleContext(turns_asleep=1)) == 2.0
+    assert mult("dream", BattleContext(turns_asleep=3)) == 4.0
+    assert mult("dream", BattleContext(turns_asleep=9)) == 4.0  # capped
 
 
 def test_luxury_is_one_not_two():
