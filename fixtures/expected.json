@@ -217,5 +217,28 @@
       "ends_battle": true,
       "notes": "Fleeing actively ends the battle."
     }
+  },
+  "_chat_minimized_note": "Battle frames captured right after an attack animation with the chat minimized, at different window sizes. These show the in-viewport narration textbox (which would be the only turn cue with the chat hidden) and confirm the HP-bar vanish/return behaviour: during the zoom/attack animation the enemy HP bar is gone (frame 1), and it reappears just after (frames 2-4). The turn counter's chat-independent fallback keys on that vanish/return cycle. 'bar_visible' is whether read_enemy_bars should find the enemy HP bar in this exact frame.",
+  "chat_minimized_fixtures": {
+    "batle_action_attack_chat_minimized_1.png": {
+      "battle_text": "Lucario used Aura Sphere!",
+      "bar_visible": false,
+      "notes": "Mid attack animation; HP bar hidden."
+    },
+    "batle_action_attack_chat_minimized_2.png": {
+      "battle_text": "It's super effective!",
+      "bar_visible": true,
+      "enemy": "Marill"
+    },
+    "batle_action_attack_chat_minimized_3.png": {
+      "battle_text": "Roserade used Toxic Spikes!",
+      "bar_visible": true,
+      "enemy": "Krokorok"
+    },
+    "batle_action_attack_chat_minimized_4.png": {
+      "battle_text": "Roserade used Venoshock!",
+      "bar_visible": true,
+      "enemy": "Krokorok"
+    }
   }
 }

@@ -82,3 +82,44 @@ def test_reset_clears_battle_state():
     assert t.turns_asleep == 0
     t.observe(2, enemy_asleep=False)  # next battle starts counting fresh
     assert t.turns_completed == 1
+
+
+# --- chat-independent HP-bar-cycle fallback ---
+
+
+def feed_bar(t: TurnTracker, presence: list[bool]) -> None:
+    for p in presence:
+        t.observe_bar(p)
+
+
+def test_bar_present_throughout_turn_one_stays_zero():
+    t = TurnTracker()
+    feed_bar(t, [True, True, True])  # no animation yet
+    assert t.turns_completed == 0
+
+
+def test_bar_vanish_and_return_marks_past_turn_one():
+    t = TurnTracker()
+    feed_bar(t, [True, True, False, False, True])  # action animation cycle
+    assert t.turns_completed == 1
+
+
+def test_bar_cycle_only_raises_a_floor_not_a_count():
+    t = TurnTracker()
+    # several animation cycles must not push turns beyond 1 on their own
+    feed_bar(t, [True, False, True, False, True, False, True])
+    assert t.turns_completed == 1
+
+
+def test_chat_overrides_bar_floor_upward():
+    t = TurnTracker()
+    feed_bar(t, [True, False, True])  # floor -> 1
+    t.observe(5, enemy_asleep=False)  # chat is authoritative
+    assert t.turns_completed == 4
+
+
+def test_bar_floor_never_lowers_chat_value():
+    t = TurnTracker()
+    t.observe(5, enemy_asleep=False)
+    feed_bar(t, [True, False, True])  # floor 1 must not reduce 4
+    assert t.turns_completed == 4

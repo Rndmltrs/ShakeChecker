@@ -259,6 +259,9 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
                 last_chat_ocr = 0.0
                 print("battle detected")
 
+            # chat-independent fallback: HP-bar vanish/return cycle -> past turn 1
+            turns.observe_bar(has_bar)
+
             if reading.state is BattleState.SINGLE:
                 bar = reading.bars[0]
                 status = status_override or bar.status.value

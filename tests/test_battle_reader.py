@@ -57,6 +57,18 @@ def test_status(name, exp):
         assert bar.status.value == enemy["status"]
 
 
+CHAT_MIN = sorted(EXPECTED["chat_minimized_fixtures"].items())
+
+
+@pytest.mark.parametrize(("name", "exp"), CHAT_MIN, ids=[n for n, _ in CHAT_MIN])
+def test_hp_bar_visibility_after_animation(name, exp):
+    # The chat-independent turn fallback relies on detecting when the enemy HP
+    # bar is present vs hidden by the attack animation.
+    img = cv2.imread(str(FIXTURES / name))
+    assert img is not None, f"missing fixture {name}"
+    assert bool(read_battle(img, CAL).bars) is exp["bar_visible"]
+
+
 BATTLE_SCENES = {"wild_single", "wild_double", "trainer"}
 
 
