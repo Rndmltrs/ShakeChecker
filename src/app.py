@@ -22,6 +22,7 @@ from pathlib import Path
 
 from battle_reader import BattleState, Calibration, load_calibration, read_battle
 from catch_calc import catch_probability
+from name_reader import NameReader
 from window_capture import (
     WINDOW_TITLE,
     WindowCapture,
@@ -36,6 +37,7 @@ from window_capture import (
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "src" / "data"
+SPECIES_PATH = DATA / "species_core.json"
 
 WAITING_POLL_S = 2.0
 IDLE_FRAME_S = 0.5  # ~2 fps
@@ -68,9 +70,9 @@ def lookup_catch_rate(species: str) -> int:
     raise SystemExit(f"unknown species: {species!r}")
 
 
-def format_line(hp_pct: float, status: str, probs: list[tuple[str, float]]) -> str:
-    balls = "  ".join(f"{name} {100 * p:5.1f}%" for name, p in probs)
-    return f"HP {hp_pct:5.1f}% [{status}]  {balls}"
+def format_line(name: str, hp_pct: float, status: str, probs: list[tuple[str, float]]) -> str:
+    balls = "  ".join(f"{ball} {100 * p:5.1f}%" for ball, p in probs)
+    return f"{name:12.12s} HP {hp_pct:5.1f}% [{status}]  {balls}"
 
 
 def ball_probs(
@@ -83,7 +85,10 @@ def ball_probs(
 
 
 def analyze_image(
-    image_path: str, base_rate: int, status_override: str | None, cal: Calibration
+    image_path: str,
+    species_override: tuple[str, int] | None,
+    status_override: str | None,
+    cal: Calibration,
 ) -> None:
     """Offline mode: run the full pipeline on a single PNG and print the result.
 
@@ -96,6 +101,7 @@ def analyze_image(
         raise SystemExit(f"cannot read image: {image_path!r}")
     status_rates = load_status_rates()
     balls = load_balls()
+    name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
     reading = read_battle(frame, cal)
     print(f"{image_path}")
     print(f"  state: {reading.state.value}  (bars detected: {len(reading.bars)})")
@@ -103,11 +109,29 @@ def analyze_image(
         print("  -> horde/double battle: ignored in v1 (overlay would stay hidden)")
     for i, bar in enumerate(reading.bars):
         status = status_override or bar.status.value
+        label, rate = resolve_species(species_override, name_reader, frame, bar)
         tag = f"bar {i}: " if len(reading.bars) > 1 else ""
-        print(f"  {tag}HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}")
-        if reading.state is BattleState.SINGLE:
-            probs = ball_probs(bar.hp_pct, base_rate, status_rates[status], balls)
-            print("  " + format_line(bar.hp_pct, status, probs))
+        print(
+            f"  {tag}{label}  HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}"
+        )
+        if reading.state is BattleState.SINGLE and rate is not None:
+            probs = ball_probs(bar.hp_pct, rate, status_rates[status], balls)
+            print("  " + format_line(label, bar.hp_pct, status, probs))
+
+
+def resolve_species(
+    species_override: tuple[str, int] | None,
+    name_reader: NameReader | None,
+    frame_bgr,
+    bar,
+) -> tuple[str, int | None]:
+    """(label, catch_rate) for a bar: the override if given, else OCR. Returns
+    ('?', None) when the name can't be read."""
+    if species_override is not None:
+        return species_override
+    assert name_reader is not None
+    sp = name_reader.read(frame_bgr, bar)
+    return (sp["name"], sp["catch_rate"]) if sp else ("?", None)
 
 
 def list_windows() -> None:
@@ -141,17 +165,22 @@ def list_windows() -> None:
         print(f"  selected client rect: {get_client_rect(picked)}")
 
 
-def run(base_rate: int, status_override: str | None, cal: Calibration) -> None:
+def run(
+    species_override: tuple[str, int] | None, status_override: str | None, cal: Calibration
+) -> None:
     balls = load_balls()
     status_rates = load_status_rates()
+    name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
     capture = WindowCapture()
     state = AppState.WAITING
     hwnd: int | None = None
     last_seen_bar = 0.0
     last_line = ""
+    cached: tuple[str, int] | None = None  # species for the current battle
 
-    src = f"manual override: {status_override}" if status_override else "auto-detected from screen"
-    print(f"base catch rate {base_rate}, status {src}")
+    species_src = f"override {species_override[0]}" if species_override else "OCR from screen"
+    status_src = f"override {status_override}" if status_override else "detected from screen"
+    print(f"species: {species_src}, status: {status_src}")
     print("waiting for PokeMMO window...")
 
     while True:
@@ -181,11 +210,26 @@ def run(base_rate: int, status_override: str | None, cal: Calibration) -> None:
             last_seen_bar = now
             if state is not AppState.BATTLE:
                 state = AppState.BATTLE
+                cached = None  # new battle: re-identify the species
                 print("battle detected")
             bar = reading.bars[0]
             status = status_override or bar.status.value
-            probs = ball_probs(bar.hp_pct, base_rate, status_rates[status], balls)
-            line = format_line(bar.hp_pct, status, probs)
+
+            if species_override is not None:
+                cached = species_override
+            elif cached is None:
+                assert name_reader is not None
+                sp = name_reader.read(frame, bar)
+                if sp is not None:
+                    cached = (sp["name"], sp["catch_rate"])
+                    print(f"identified: {cached[0]} (catch rate {cached[1]})")
+
+            if cached is None:
+                line = f"{'?':12s} HP {bar.hp_pct:5.1f}% [{status}]  (identifying species...)"
+            else:
+                label, rate = cached
+                probs = ball_probs(bar.hp_pct, rate, status_rates[status], balls)
+                line = format_line(label, bar.hp_pct, status, probs)
             if line != last_line:
                 print(line)
                 last_line = line
@@ -197,6 +241,7 @@ def run(base_rate: int, status_override: str | None, cal: Calibration) -> None:
         elif state is AppState.BATTLE and now - last_seen_bar > BATTLE_END_GRACE_S:
             state = AppState.IDLE
             last_line = ""
+            cached = None
             print("battle ended")
 
         time.sleep(BATTLE_FRAME_S if state is AppState.BATTLE else IDLE_FRAME_S)
@@ -207,10 +252,10 @@ def main() -> None:
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    parser = argparse.ArgumentParser(description="ShakeChecker milestone-1 console output")
+    parser = argparse.ArgumentParser(description="ShakeChecker console output")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--species", help="species name, e.g. Onix")
-    group.add_argument("--rate", type=int, help="base catch rate override")
+    group.add_argument("--species", help="override the auto-detected species, e.g. Onix")
+    group.add_argument("--rate", type=int, help="override with a raw base catch rate")
     parser.add_argument(
         "--status",
         default=None,
@@ -232,19 +277,22 @@ def main() -> None:
         list_windows()
         return
 
-    if args.species is None and args.rate is None:
-        parser.error("one of --species or --rate is required (or use --list-windows)")
+    # species is read from the screen by default; --species/--rate override it
+    species_override: tuple[str, int] | None = None
+    if args.species is not None:
+        species_override = (args.species, lookup_catch_rate(args.species))
+    elif args.rate is not None:
+        species_override = (f"rate {args.rate}", args.rate)
 
-    base_rate = args.rate if args.rate is not None else lookup_catch_rate(args.species)
     cal = load_calibration(ROOT / "calibration.toml")
 
     if args.image:
-        analyze_image(args.image, base_rate, args.status, cal)
+        analyze_image(args.image, species_override, args.status, cal)
         return
 
     set_dpi_awareness()
     try:
-        run(base_rate, args.status, cal)
+        run(species_override, args.status, cal)
     except KeyboardInterrupt:
         sys.exit(0)
 

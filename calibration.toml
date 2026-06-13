@@ -98,3 +98,17 @@ yellow = [18, 38]
 magenta = [140, 175]
 red = [0, 12]
 cyan = [85, 99]
+
+[name]
+# Enemy name region: right of the status badge, above the bar. Relative to the
+# bar fill-start x and mid-row y (fixed-size UI). The crop spans name + "Lv. NN"
+# + gender/caught icons; OCR text is cut at the level marker and fuzzy-matched
+# against the species list. Verified against all named fixtures (Cascoon, Onix,
+# Mantine, Ursaring, Pachirisu, Tentacool incl. 1920x1080).
+dx0 = 2
+dx1 = 230
+dy0 = -34
+dy1 = -6
+upscale = 3
+# rapidfuzz WRatio 0-100; below this the OCR result is treated as unrecognized.
+min_match_score = 70.0

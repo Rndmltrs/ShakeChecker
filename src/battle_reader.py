@@ -122,9 +122,19 @@ class StatusCalibration(BaseModel):
     hue: StatusHueCalibration
 
 
+class NameCalibration(BaseModel):
+    dx0: int
+    dx1: int
+    dy0: int
+    dy1: int
+    upscale: int
+    min_match_score: float
+
+
 class Calibration(BaseModel):
     hp_bar: HpBarCalibration
     status: StatusCalibration
+    name: NameCalibration
 
 
 def load_calibration(path: Path | str) -> Calibration:
