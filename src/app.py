@@ -39,7 +39,10 @@ DATA = ROOT / "src" / "data"
 WAITING_POLL_S = 2.0
 IDLE_FRAME_S = 0.5  # ~2 fps
 BATTLE_FRAME_S = 0.2  # ~5 fps
-BAR_GONE_TIMEOUT_S = 1.0
+# Debounce: the enemy HP bar briefly vanishes during attack/status animations,
+# so only treat the battle as over once the bar has been gone continuously for
+# this long. Otherwise the state flickers battle->idle->battle mid-fight.
+BATTLE_END_GRACE_S = 2.5
 
 
 class AppState(enum.Enum):
@@ -190,7 +193,7 @@ def run(base_rate: int, status: str, cal: Calibration) -> None:
             if last_line != "multi":
                 print("multiple enemy bars (horde/double): ignored in v1")
                 last_line = "multi"
-        elif state is AppState.BATTLE and now - last_seen_bar > BAR_GONE_TIMEOUT_S:
+        elif state is AppState.BATTLE and now - last_seen_bar > BATTLE_END_GRACE_S:
             state = AppState.IDLE
             last_line = ""
             print("battle ended")

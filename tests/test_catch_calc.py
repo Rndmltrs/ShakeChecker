@@ -19,6 +19,19 @@ def test_bulbasaur_reference_case():
     assert p == pytest.approx(0.118, abs=0.0005)
 
 
+def test_status_rate_table():
+    # Pin the catch multipliers: SLP/FRZ x2, PAR/PSN/BRN x1.5 (minor-status
+    # bonus; PSN/BRN absent from Hub but confirmed x1.5 in-game), none x1.
+    assert STATUS == {
+        "none": 1.0,
+        "slp": 2.0,
+        "frz": 2.0,
+        "par": 1.5,
+        "psn": 1.5,
+        "brn": 1.5,
+    }
+
+
 def test_guaranteed_catch_at_x_cap():
     # full HP contributes factor 1/3, so rate 255 with ball x3 gives x = 255 exactly -> 100%
     assert catch_probability(1.0, 255, ball_rate=3.0) == 1.0

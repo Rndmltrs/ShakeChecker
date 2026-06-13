@@ -70,7 +70,7 @@ else:
 
 Reference check: Bulbasaur (rate 45), 100% HP, Sleep, Poke Ball -> x = 30, P = 11.8% (matches pokemmohub.com).
 
-- `status_rate` (PokeMMO custom, NOT mainline): Sleep ×2, Freeze ×2, Paralysis ×1.5, none ×1. **Open question:** Poison/Burn are absent from the Hub list — verify in-game/forum whether they count ×1.5 or ×1; keep configurable.
+- `status_rate` (PokeMMO custom, NOT mainline): Sleep ×2, Freeze ×2, Paralysis ×1.5, none ×1. Poison/Burn are absent from the Hub list but apply the Gen 3/4 minor-status bonus ×1.5 (poison confirmed in-game). Kept configurable in `status_rates.json`.
 - `ball_rate` (PokeMMO custom values from Hub source, flat — all in `balls.json`):
   - Poke ×1, Great ×1.5, Ultra ×2, Heal ×1.25, Luxury ×2, Net ×3.5, Nest ×4, Dusk ×2.5, Quick ×5, Timer ×4, Repeat ×2.5, Dream ×4
   - The Hub models all balls as **flat multipliers** (no turn scaling for Timer, no turn-1 condition for Quick, no type condition for Net). **Open question:** whether PokeMMO applies conditions in-game or genuinely flattened these — verify via forum/wiki before shipping conditional logic. v1: show flat values, identical to Hub.
