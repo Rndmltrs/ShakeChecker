@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import enum
+import io
 import json
 import sys
 import time
@@ -64,6 +65,44 @@ def format_line(hp_pct: float, status: str, probs: list[tuple[str, float]]) -> s
     return f"HP {hp_pct:5.1f}% [{status}]  {balls}"
 
 
+def ball_probs(
+    hp_pct: float, base_rate: int, status_rate: float, balls: list[dict]
+) -> list[tuple[str, float]]:
+    return [
+        (b["name"], catch_probability(hp_pct / 100.0, base_rate, b["rate"], status_rate))
+        for b in balls
+    ]
+
+
+def analyze_image(image_path: str, base_rate: int, status: str, cal: Calibration) -> None:
+    """Offline mode: run the full pipeline on a single PNG and print the result.
+
+    Lets you verify reader + probabilities + output format without the live
+    game (same code path the live loop uses)."""
+    import cv2
+
+    frame = cv2.imread(image_path)
+    if frame is None:
+        raise SystemExit(f"cannot read image: {image_path!r}")
+    status_rate = load_status_rates()[status]
+    balls = load_balls()
+    reading = read_battle(frame, cal)
+    print(f"{image_path}")
+    print(f"  state: {reading.state.value}  (bars detected: {len(reading.bars)})")
+    if reading.state is BattleState.MULTI:
+        print("  -> horde/double battle: ignored in v1 (overlay would stay hidden)")
+    for i, bar in enumerate(reading.bars):
+        tag = f"bar {i}: " if len(reading.bars) > 1 else ""
+        print(f"  {tag}HP {bar.hp_pct:.1f}% ({bar.color.value})")
+        if reading.state is BattleState.SINGLE:
+            print(
+                "  "
+                + format_line(
+                    bar.hp_pct, status, ball_probs(bar.hp_pct, base_rate, status_rate, balls)
+                )
+            )
+
+
 def run(base_rate: int, status: str, cal: Calibration) -> None:
     balls = load_balls()
     status_rate = load_status_rates()[status]
@@ -105,14 +144,9 @@ def run(base_rate: int, status: str, cal: Calibration) -> None:
                 state = AppState.BATTLE
                 print("battle detected")
             bar = reading.bars[0]
-            probs = [
-                (
-                    b["name"],
-                    catch_probability(bar.hp_pct / 100.0, base_rate, b["rate"], status_rate),
-                )
-                for b in balls
-            ]
-            line = format_line(bar.hp_pct, status, probs)
+            line = format_line(
+                bar.hp_pct, status, ball_probs(bar.hp_pct, base_rate, status_rate, balls)
+            )
             if line != last_line:
                 print(line)
                 last_line = line
@@ -130,6 +164,10 @@ def run(base_rate: int, status: str, cal: Calibration) -> None:
 
 
 def main() -> None:
+    # Ball names contain non-ASCII (Poké Ball); force UTF-8 on the Windows console.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description="ShakeChecker milestone-1 console output")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--species", help="species name, e.g. Onix")
@@ -140,11 +178,20 @@ def main() -> None:
         choices=sorted(load_status_rates()),
         help="enemy status (read manually until milestone 2)",
     )
+    parser.add_argument(
+        "--image",
+        help="offline mode: analyze a single PNG (e.g. a fixture) instead of the live window",
+    )
     args = parser.parse_args()
 
-    set_dpi_awareness()
     base_rate = args.rate if args.rate is not None else lookup_catch_rate(args.species)
     cal = load_calibration(ROOT / "calibration.toml")
+
+    if args.image:
+        analyze_image(args.image, base_rate, args.status, cal)
+        return
+
+    set_dpi_awareness()
     try:
         run(base_rate, args.status, cal)
     except KeyboardInterrupt:
