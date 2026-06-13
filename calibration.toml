@@ -99,6 +99,22 @@ magenta = [140, 175]
 red = [0, 12]
 cyan = [85, 99]
 
+[battle_ui]
+# Authoritative "in a battle" signal: the battle screen has a uniform dark
+# command panel along the bottom of the viewport (action menu / move list /
+# textbox) that is present throughout the battle including the intro banner and
+# attack animations. The overworld bottom band is bright and textured.
+# Measured (all fixtures): every battle scene -> dark_frac 1.00 (Vmean <= 40);
+# every overworld -> 0.14-0.67 (Vmean 82-118). Battle membership uses THIS, not
+# the enemy HP bar (which vanishes during animations), so "battle ended" fires
+# only when the overlay actually disappears (faint / flee / back to overworld).
+top = 0.78
+bottom = 0.90
+left = 0.15
+right = 0.55
+dark_val_max = 90
+min_dark_frac = 0.90
+
 [name]
 # Enemy name region: right of the status badge, above the bar. Relative to the
 # bar fill-start x and mid-row y (fixed-size UI). The crop spans name + "Lv. NN"

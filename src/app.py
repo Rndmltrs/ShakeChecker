@@ -20,7 +20,13 @@ import sys
 import time
 from pathlib import Path
 
-from battle_reader import BattleState, Calibration, load_calibration, read_battle
+from battle_reader import (
+    BattleState,
+    Calibration,
+    is_battle_ui_present,
+    load_calibration,
+    read_battle,
+)
 from catch_calc import catch_probability
 from name_reader import NameReader
 from window_capture import (
@@ -42,10 +48,10 @@ SPECIES_PATH = DATA / "species_core.json"
 WAITING_POLL_S = 2.0
 IDLE_FRAME_S = 0.5  # ~2 fps
 BATTLE_FRAME_S = 0.2  # ~5 fps
-# Debounce: the enemy HP bar briefly vanishes during attack/status animations,
-# so only treat the battle as over once the bar has been gone continuously for
-# this long. Otherwise the state flickers battle->idle->battle mid-fight.
-BATTLE_END_GRACE_S = 2.5
+# Battle membership follows the battle command panel (see is_battle_ui_present),
+# which is stable through intro/animations. Only end the battle once that panel
+# has been gone continuously for this long (covers fade-out transitions).
+BATTLE_END_GRACE_S = 1.5
 
 
 class AppState(enum.Enum):
@@ -174,7 +180,7 @@ def run(
     capture = WindowCapture()
     state = AppState.WAITING
     hwnd: int | None = None
-    last_seen_bar = 0.0
+    last_seen_battle = 0.0
     last_line = ""
     cached: tuple[str, int] | None = None  # species for the current battle
 
@@ -203,42 +209,44 @@ def run(
             continue
 
         frame = capture.grab(rect)
-        reading = read_battle(frame, cal)
         now = time.monotonic()
 
-        if reading.state is BattleState.SINGLE:
-            last_seen_bar = now
+        # Battle membership follows the battle overlay, not the HP bar.
+        if is_battle_ui_present(frame, cal.battle_ui):
+            last_seen_battle = now
             if state is not AppState.BATTLE:
                 state = AppState.BATTLE
                 cached = None  # new battle: re-identify the species
+                last_line = ""
                 print("battle detected")
-            bar = reading.bars[0]
-            status = status_override or bar.status.value
 
-            if species_override is not None:
-                cached = species_override
-            elif cached is None:
-                assert name_reader is not None
-                sp = name_reader.read(frame, bar)
-                if sp is not None:
-                    cached = (sp["name"], sp["catch_rate"])
-                    print(f"identified: {cached[0]} (catch rate {cached[1]})")
+            reading = read_battle(frame, cal)
+            if reading.state is BattleState.SINGLE:
+                bar = reading.bars[0]
+                status = status_override or bar.status.value
+                if species_override is not None:
+                    cached = species_override
+                elif cached is None:
+                    assert name_reader is not None
+                    sp = name_reader.read(frame, bar)
+                    if sp is not None:
+                        cached = (sp["name"], sp["catch_rate"])
+                        print(f"identified: {cached[0]} (catch rate {cached[1]})")
 
-            if cached is None:
-                line = f"{'?':12s} HP {bar.hp_pct:5.1f}% [{status}]  (identifying species...)"
-            else:
-                label, rate = cached
-                probs = ball_probs(bar.hp_pct, rate, status_rates[status], balls)
-                line = format_line(label, bar.hp_pct, status, probs)
-            if line != last_line:
-                print(line)
-                last_line = line
-        elif reading.state is BattleState.MULTI:
-            last_seen_bar = now  # in battle, but not a catchable v1 scenario
-            if last_line != "multi":
+                if cached is None:
+                    line = f"{'?':12.12s} HP {bar.hp_pct:5.1f}% [{status}]  (identifying...)"
+                else:
+                    label, rate = cached
+                    probs = ball_probs(bar.hp_pct, rate, status_rates[status], balls)
+                    line = format_line(label, bar.hp_pct, status, probs)
+                if line != last_line:
+                    print(line)
+                    last_line = line
+            elif reading.state is BattleState.MULTI and last_line != "multi":
                 print("multiple enemy bars (horde/double): ignored in v1")
                 last_line = "multi"
-        elif state is AppState.BATTLE and now - last_seen_bar > BATTLE_END_GRACE_S:
+            # NO_BATTLE while the overlay is up = intro/animation: keep last line
+        elif state is AppState.BATTLE and now - last_seen_battle > BATTLE_END_GRACE_S:
             state = AppState.IDLE
             last_line = ""
             cached = None

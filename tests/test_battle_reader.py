@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import pytest
 
-from battle_reader import BattleState, load_calibration, read_battle
+from battle_reader import BattleState, is_battle_ui_present, load_calibration, read_battle
 
 ROOT = Path(__file__).parent.parent
 FIXTURES = ROOT / "fixtures"
@@ -55,3 +55,11 @@ def test_status(name, exp):
     assert len(reading.bars) == len(exp["enemies"])
     for bar, enemy in zip(reading.bars, exp["enemies"], strict=True):
         assert bar.status.value == enemy["status"]
+
+
+@pytest.mark.parametrize(("name", "exp"), CASES, ids=IDS)
+def test_battle_ui_presence(name, exp):
+    # The command panel marks any battle (wild/double/trainer); overworld has none.
+    img = cv2.imread(str(FIXTURES / name))
+    expected_present = exp["scene"] != "overworld"
+    assert is_battle_ui_present(img, CAL.battle_ui) is expected_present
