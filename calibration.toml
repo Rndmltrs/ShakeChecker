@@ -66,3 +66,35 @@ sat_max = 60
 # Crosshatch lattice lines dip below val_min, hence < 1.0
 # (1_HP_red_health_no_status_cave.png has the longest empty stretch).
 min_light_ratio = 0.70
+
+[status]
+# Status badge sits left of the enemy name, just above the bar's left edge.
+# Box is relative to the bar fill-start x and bar mid-row y (UI is fixed-size,
+# so the same offsets hold at every resolution). Verified against the SLP/PAR/
+# PSN fixtures (e.g. full_health_sleeping/paralyzed, *_trainer_battle_poisoned).
+dx0 = -24
+dx1 = -3
+dy0 = -28
+dy1 = -7
+# Every badge has a dark border + icon; the empty no-status slot is plain
+# background (sky/cave) with no dark pixels. dark_frac is the presence signal:
+# 0.00 for all no-status fixtures, >=0.13 for all badge fixtures.
+dark_val_max = 90
+present_dark_frac = 0.05
+# Colored badge field: bright, saturated pixels of the badge fill colour.
+fill_sat_min = 90
+fill_val_min = 110
+band_frac_min = 0.10
+# SLP badge field is white/light grey (low saturation), not a hue.
+white_sat_max = 70
+white_val_min = 150
+white_frac_min = 0.12
+
+[status.hue]
+# OpenCV H 0-179. PAR yellow and PSN magenta measured from fixtures; BRN red
+# and FRZ cyan are extrapolated (no fixture) and covered by synthetic tests.
+# The sky-blue background band (~100-116) is deliberately not a status colour.
+yellow = [18, 38]
+magenta = [140, 175]
+red = [0, 12]
+cyan = [85, 99]

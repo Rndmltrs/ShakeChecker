@@ -1,12 +1,13 @@
-"""Milestone 1 console app: WAITING -> IDLE -> BATTLE state machine.
+"""ShakeChecker console app: WAITING -> IDLE -> BATTLE state machine.
 
 Watches the PokeMMO window and prints per-ball catch probabilities for the
-current wild battle. Species (and status, until milestone 2 reads it from
-screen) are given on the command line:
+current wild battle. HP%, HP colour and enemy status are read from the screen;
+the species (base catch rate) is given on the command line:
 
-    python src/app.py --species Onix
-    python src/app.py --species Onix --status slp
+    python src/app.py --species Onix       # status auto-detected from screen
+    python src/app.py --species Onix --status slp   # override the detection
     python src/app.py --rate 45            # raw base catch rate instead
+    python src/app.py --list-windows       # diagnose window detection
 """
 
 from __future__ import annotations
@@ -81,7 +82,9 @@ def ball_probs(
     ]
 
 
-def analyze_image(image_path: str, base_rate: int, status: str, cal: Calibration) -> None:
+def analyze_image(
+    image_path: str, base_rate: int, status_override: str | None, cal: Calibration
+) -> None:
     """Offline mode: run the full pipeline on a single PNG and print the result.
 
     Lets you verify reader + probabilities + output format without the live
@@ -91,7 +94,7 @@ def analyze_image(image_path: str, base_rate: int, status: str, cal: Calibration
     frame = cv2.imread(image_path)
     if frame is None:
         raise SystemExit(f"cannot read image: {image_path!r}")
-    status_rate = load_status_rates()[status]
+    status_rates = load_status_rates()
     balls = load_balls()
     reading = read_battle(frame, cal)
     print(f"{image_path}")
@@ -99,15 +102,12 @@ def analyze_image(image_path: str, base_rate: int, status: str, cal: Calibration
     if reading.state is BattleState.MULTI:
         print("  -> horde/double battle: ignored in v1 (overlay would stay hidden)")
     for i, bar in enumerate(reading.bars):
+        status = status_override or bar.status.value
         tag = f"bar {i}: " if len(reading.bars) > 1 else ""
-        print(f"  {tag}HP {bar.hp_pct:.1f}% ({bar.color.value})")
+        print(f"  {tag}HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}")
         if reading.state is BattleState.SINGLE:
-            print(
-                "  "
-                + format_line(
-                    bar.hp_pct, status, ball_probs(bar.hp_pct, base_rate, status_rate, balls)
-                )
-            )
+            probs = ball_probs(bar.hp_pct, base_rate, status_rates[status], balls)
+            print("  " + format_line(bar.hp_pct, status, probs))
 
 
 def list_windows() -> None:
@@ -141,16 +141,17 @@ def list_windows() -> None:
         print(f"  selected client rect: {get_client_rect(picked)}")
 
 
-def run(base_rate: int, status: str, cal: Calibration) -> None:
+def run(base_rate: int, status_override: str | None, cal: Calibration) -> None:
     balls = load_balls()
-    status_rate = load_status_rates()[status]
+    status_rates = load_status_rates()
     capture = WindowCapture()
     state = AppState.WAITING
     hwnd: int | None = None
     last_seen_bar = 0.0
     last_line = ""
 
-    print(f"base catch rate {base_rate}, status {status} (x{status_rate})")
+    src = f"manual override: {status_override}" if status_override else "auto-detected from screen"
+    print(f"base catch rate {base_rate}, status {src}")
     print("waiting for PokeMMO window...")
 
     while True:
@@ -182,9 +183,9 @@ def run(base_rate: int, status: str, cal: Calibration) -> None:
                 state = AppState.BATTLE
                 print("battle detected")
             bar = reading.bars[0]
-            line = format_line(
-                bar.hp_pct, status, ball_probs(bar.hp_pct, base_rate, status_rate, balls)
-            )
+            status = status_override or bar.status.value
+            probs = ball_probs(bar.hp_pct, base_rate, status_rates[status], balls)
+            line = format_line(bar.hp_pct, status, probs)
             if line != last_line:
                 print(line)
                 last_line = line
@@ -212,9 +213,9 @@ def main() -> None:
     group.add_argument("--rate", type=int, help="base catch rate override")
     parser.add_argument(
         "--status",
-        default="none",
+        default=None,
         choices=sorted(load_status_rates()),
-        help="enemy status (read manually until milestone 2)",
+        help="override the auto-detected enemy status (default: read from screen)",
     )
     parser.add_argument(
         "--image",

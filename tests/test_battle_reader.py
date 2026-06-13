@@ -43,3 +43,15 @@ def test_hp_and_color(name, exp):
         assert bar.hp_pct == pytest.approx(enemy["hp_pct"], abs=META["hp_tolerance_pct"])
         assert bar.hp_pct > 0.0
         assert bar.color == enemy["hp_color"]
+
+
+@pytest.mark.parametrize(
+    ("name", "exp"),
+    [(n, e) for n, e in CASES if e["enemies"]],
+    ids=[n for n, e in CASES if e["enemies"]],
+)
+def test_status(name, exp):
+    reading = read(name)
+    assert len(reading.bars) == len(exp["enemies"])
+    for bar, enemy in zip(reading.bars, exp["enemies"], strict=True):
+        assert bar.status.value == enemy["status"]

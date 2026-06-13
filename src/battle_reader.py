@@ -35,10 +35,20 @@ class BattleState(enum.Enum):
     MULTI = "multi"  # double battle / horde: ignored in v1
 
 
+class Status(enum.StrEnum):
+    NONE = "none"
+    SLP = "slp"
+    PAR = "par"
+    PSN = "psn"
+    BRN = "brn"
+    FRZ = "frz"
+
+
 @dataclass(frozen=True)
 class BarReading:
     hp_pct: float  # (0, 100]
     color: HpColor
+    status: Status
     x: int  # fill start, frame coords
     y: int  # bar middle row, frame coords
 
@@ -89,8 +99,32 @@ class HpBarCalibration(BaseModel):
     empty: EmptyBarCalibration
 
 
+class StatusHueCalibration(BaseModel):
+    yellow: tuple[int, int]
+    magenta: tuple[int, int]
+    red: tuple[int, int]
+    cyan: tuple[int, int]
+
+
+class StatusCalibration(BaseModel):
+    dx0: int
+    dx1: int
+    dy0: int
+    dy1: int
+    dark_val_max: int
+    present_dark_frac: float
+    fill_sat_min: int
+    fill_val_min: int
+    band_frac_min: float
+    white_sat_max: int
+    white_val_min: int
+    white_frac_min: float
+    hue: StatusHueCalibration
+
+
 class Calibration(BaseModel):
     hp_bar: HpBarCalibration
+    status: StatusCalibration
 
 
 def load_calibration(path: Path | str) -> Calibration:
@@ -184,6 +218,47 @@ def _has_bar_frame(
     )
 
 
+def classify_status_box(hsv_box: np.ndarray, cal: StatusCalibration) -> Status:
+    """Classify the enemy status from the badge-region HSV crop.
+
+    Presence is decided by the dark border/icon (no-status slot has none);
+    a present badge is classified by its fill colour (PAR yellow, PSN magenta,
+    BRN red, FRZ cyan) or, lacking a hue, by its white field (SLP)."""
+    if hsv_box.size == 0:
+        return Status.NONE
+    h, s, v = hsv_box[:, :, 0], hsv_box[:, :, 1], hsv_box[:, :, 2]
+    if float(np.mean(v < cal.dark_val_max)) < cal.present_dark_frac:
+        return Status.NONE
+
+    sat = (s >= cal.fill_sat_min) & (v >= cal.fill_val_min)
+
+    def band(rng: tuple[int, int]) -> float:
+        return float(np.mean(sat & (h >= rng[0]) & (h <= rng[1])))
+
+    bands = {
+        Status.PAR: band(cal.hue.yellow),
+        Status.PSN: band(cal.hue.magenta),
+        Status.BRN: band(cal.hue.red),
+        Status.FRZ: band(cal.hue.cyan),
+    }
+    best = max(bands, key=lambda k: bands[k])
+    if bands[best] >= cal.band_frac_min:
+        return best
+    white = float(np.mean((v >= cal.white_val_min) & (s < cal.white_sat_max)))
+    if white >= cal.white_frac_min:
+        return Status.SLP
+    return Status.NONE
+
+
+def read_status(hsv_full: np.ndarray, x: int, y: int, cal: StatusCalibration) -> Status:
+    """Status for a bar whose fill starts at (x, y) in frame coords."""
+    y0, y1 = y + cal.dy0, y + cal.dy1
+    x0, x1 = x + cal.dx0, x + cal.dx1
+    if y0 < 0 or x0 < 0 or y1 > hsv_full.shape[0] or x1 > hsv_full.shape[1]:
+        return Status.NONE
+    return classify_status_box(hsv_full[y0:y1, x0:x1], cal)
+
+
 def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]:
     """Find and measure all enemy HP bars in the frame, top to bottom."""
     c = cal.hp_bar
@@ -222,7 +297,8 @@ def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]
         hues = hsv_full[fy, rx0 : rx1 + 1, 0].astype(float)
         color = _classify_color(float(np.median(hues)), c.hsv)
         hp_pct = min(100.0, 100.0 * fill_w / c.inner_width_px)
-        bars.append(BarReading(hp_pct=round(hp_pct, 1), color=color, x=rx0, y=fy))
+        status = read_status(hsv_full, rx0, fy, cal.status)
+        bars.append(BarReading(hp_pct=round(hp_pct, 1), color=color, status=status, x=rx0, y=fy))
 
     # merge duplicate detections of the same bar (multiple blobs per fill)
     bars.sort(key=lambda b: (b.y, b.x))
