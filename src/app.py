@@ -333,13 +333,15 @@ class LiveLoop:
 
     def _battle_step(self, frame, reading, rect, now: float) -> None:
         # Read the location once per battle (it never changes mid-battle) to set
-        # the Dusk Ball cave boost.
+        # the Dusk Ball cave boost. Retry until a non-empty name is read (the first
+        # battle frame can be mid-transition).
         if not self._loc_read:
             loc = read_location(frame, self.cal.location)
-            self.dusk_active = is_cave_location(loc)
-            self._loc_read = True
-            if self.dusk_active:
-                print(f"location: {loc} (cave -> Dusk Ball boosted)")
+            if loc:
+                self.dusk_active = is_cave_location(loc)
+                self._loc_read = True
+                note = " (cave -> Dusk Ball boosted)" if self.dusk_active else ""
+                print(f"location: {loc}{note}")
 
         asleep = reading.state is BattleState.SINGLE and reading.bars[0].status is Status.SLP
 
