@@ -30,6 +30,12 @@ def test_parse_chat_detects_catch():
     assert parse_chat([]).caught is False
 
 
+def test_parse_chat_extracts_caught_species():
+    assert parse_chat(["[Battle] Gotcha! Rhyhorn was caught!"]).caught_name == "Rhyhorn"
+    assert parse_chat(["[Battle] Geodude was caught!"]).caught_name == "Geodude"
+    assert parse_chat(["Turn 2 started!"]).caught_name is None
+
+
 def test_read_chat_detects_catch_fixture():
     img = cv2.imread(
         str(ROOT / "fixtures" / "batle_action_pokemon_catched_text_after pokeball_disapeared.png")

@@ -20,6 +20,8 @@ import sys
 import time
 from pathlib import Path
 
+from rapidfuzz import fuzz
+
 from battle_log import read_chat, read_turn_number
 from battle_reader import (
     BattleState,
@@ -216,6 +218,7 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
     turns = TurnTracker()
     hp = HpSettler()
     caught_seen = False  # latest chat catch reading
+    caught_name: str | None = None  # species named in the catch line
     caught_handled = False  # printed the catch message this battle
 
     species_src = f"override {species_override['name']}" if species_override else "OCR from screen"
@@ -276,18 +279,26 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
                 chat = read_chat(frame, cal.chat)
                 turns.observe(chat.turn_number, asleep)
                 caught_seen = chat.caught
+                caught_name = chat.caught_name
                 last_chat_ocr = now
 
-            # A catch ends the battle: chat says "caught" and the enemy bar is
-            # gone. Requiring the bar to be gone avoids a stale catch line ending
-            # the *next* battle (whose enemy bar is present).
-            if caught_seen and not has_bar and not caught_handled:
-                name = cached["name"] if cached else "the Pokemon"
-                print(f"caught {name}!")
+            # A catch is confirmed when the chat's "X was caught!" names the
+            # current enemy (the bar lingers during the catch, so we match the
+            # species instead — this also ignores a stale catch line from the
+            # previous battle, whose name won't match the new enemy).
+            if (
+                caught_seen
+                and not caught_handled
+                and cached is not None
+                and caught_name is not None
+                and fuzz.ratio(caught_name.lower(), cached["name"].lower()) >= 80
+            ):
+                print(f"caught {cached['name']}!")
                 caught_handled = True
-                state = AppState.IDLE
                 last_line = ""
-                cached = None
+
+            if caught_handled:
+                pass  # enemy caught: stop updating; battle ends when the UI clears
             elif reading.state is BattleState.SINGLE:
                 bar = reading.bars[0]
                 hp_pct = hp.update(bar.hp_pct)  # wait for the bar to settle
@@ -327,7 +338,12 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
             state = AppState.IDLE
             last_line = ""
             cached = None
-            print("battle ended")
+            # after a catch we already printed "caught X!"; don't also say ended
+            if not caught_handled:
+                print("battle ended")
+            caught_seen = False
+            caught_name = None
+            caught_handled = False
 
         time.sleep(BATTLE_FRAME_S if state is AppState.BATTLE else IDLE_FRAME_S)
 

@@ -18,14 +18,15 @@ from ocr_engine import run_ocr
 
 # "Turn 2 started!" — tolerate OCR spacing/case noise.
 _TURN = re.compile(r"turn\s*(\d{1,3})\s*start", re.IGNORECASE)
-# "Gotcha! X was caught!" — the catch confirmation line.
-_CAUGHT = re.compile(r"gotcha|was\s*caught", re.IGNORECASE)
+# "Gotcha! X was caught!" — the catch confirmation line; capture the species.
+_CAUGHT_NAME = re.compile(r"([A-Za-z][A-Za-z'.\-]*)\s+was\s+caught", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
 class ChatEvents:
     turn_number: int | None
     caught: bool
+    caught_name: str | None  # species named in the catch line, if any
 
 
 def parse_turn_number(texts: list[str]) -> int | None:
@@ -39,8 +40,17 @@ def parse_turn_number(texts: list[str]) -> int | None:
 
 
 def parse_chat(texts: list[str]) -> ChatEvents:
-    caught = any(_CAUGHT.search(line) for line in texts)
-    return ChatEvents(turn_number=parse_turn_number(texts), caught=caught)
+    caught_name: str | None = None
+    for line in texts:
+        m = _CAUGHT_NAME.search(line)
+        if m:
+            caught_name = m.group(1)
+            break
+    return ChatEvents(
+        turn_number=parse_turn_number(texts),
+        caught=caught_name is not None,
+        caught_name=caught_name,
+    )
 
 
 def read_chat(frame_bgr: np.ndarray, cal: ChatCalibration) -> ChatEvents:
@@ -48,7 +58,7 @@ def read_chat(frame_bgr: np.ndarray, cal: ChatCalibration) -> ChatEvents:
     h, w = frame_bgr.shape[:2]
     crop = frame_bgr[int(h * cal.top) : int(h * cal.bottom), int(w * cal.left) : int(w * cal.right)]
     if crop.size == 0:
-        return ChatEvents(turn_number=None, caught=False)
+        return ChatEvents(turn_number=None, caught=False, caught_name=None)
     up = cv2.resize(crop, None, fx=cal.upscale, fy=cal.upscale, interpolation=cv2.INTER_CUBIC)
     return parse_chat(run_ocr(up))
 
