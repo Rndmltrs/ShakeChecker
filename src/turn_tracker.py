@@ -15,6 +15,11 @@ that has fully begun N means N-1 turns completed. Two signals funnel in:
   animation frame, the player toggling the chat) and a submenu opened and
   cancelled — none of which keep the menu gone for seconds the way a committed
   action does.
+
+The enemy HP bar is deliberately NOT a turn signal: it blinks off/on during
+many in-battle animations (a confirmed culprit: the opponent's Intimidate
+lowering Attack at switch-in, before turn 1 even starts), so keying turns on it
+produced phantom turns.
 """
 
 from __future__ import annotations
