@@ -26,7 +26,7 @@ from pathlib import Path
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
-from battle_log import read_turn_number
+from battle_log import AsyncChatReader, read_turn_number
 from battle_reader import (
     BattleState,
     BattleTextReader,
@@ -69,13 +69,6 @@ BATTLE_FRAME_S = 0.2  # ~5 fps
 # which is stable through intro/animations. Only end the battle once that panel
 # has been gone continuously for this long (covers fade-out transitions).
 BATTLE_END_GRACE_S = 1.5
-# Chat OCR gives the EXACT turn the instant "Turn N started!" prints, so poll it
-# briskly — the overlay's turn should update within a fraction of a second of the
-# new turn, not a full second later. (No over-count risk: the chat is exact.)
-CHAT_OCR_INTERVAL_S = 0.4
-# When the chat keeps reading nothing (minimized / wrong tab) back off to this so
-# the wasted OCR doesn't slow the loop; the menu fallback then drives the turns.
-CHAT_OCR_IDLE_S = 2.0
 
 
 class AppState(enum.Enum):
@@ -247,12 +240,12 @@ class LiveLoop:
         self.status_rates = load_status_rates()
         self.name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
         self.battle_text = BattleTextReader(cal.battle_text, TEMPLATES_DIR)
+        self.chat = AsyncChatReader(cal.chat)  # background turn-OCR (correction only)
         self.capture = WindowCapture()
 
         self.state = AppState.WAITING
         self.hwnd: int | None = None
         self.last_seen_battle = 0.0
-        self.last_chat_ocr = 0.0
         self.last_line = ""
         self.cached: dict | None = None  # enemy for the current battle
         self.turns = TurnTracker()
@@ -262,7 +255,6 @@ class LiveLoop:
         self._catch_streak = 0  # consecutive frames the catch banner was seen
         self.dusk_active = False  # cave/night -> Dusk Ball boost
         self._loc_read = False  # location OCR'd this battle yet
-        self._chat_misses = 0  # consecutive chat reads with no turn (chat hidden?)
         self._is_trainer = False  # trainer battle -> overlay hidden
         self._trainer_decided = False  # trainer vs wild settled this battle
 
@@ -319,7 +311,7 @@ class LiveLoop:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
                 self._enter_battle()
-            self._battle_step(frame, reading, client_rect, now)
+            self._battle_step(frame, reading, client_rect)
         elif self.state is AppState.BATTLE and now - self.last_seen_battle > BATTLE_END_GRACE_S:
             self.state = AppState.IDLE
             self.last_line = ""
@@ -338,17 +330,16 @@ class LiveLoop:
         self.turns.reset()
         self.hp.reset()
         self.status.reset()
-        self.last_chat_ocr = 0.0
+        self.chat.reset()  # drop any in-flight turn OCR from the previous battle
         self._caught_printed = False
         self._catch_streak = 0
         self.dusk_active = False
         self._loc_read = False
-        self._chat_misses = 0
         self._is_trainer = False
         self._trainer_decided = False
         print("battle detected")
 
-    def _battle_step(self, frame, reading, rect, now: float) -> None:
+    def _battle_step(self, frame, reading, rect) -> None:
         # Read the location once per battle (it never changes mid-battle) to set
         # the Dusk Ball cave boost. Retry until a non-empty name is read (the first
         # battle frame can be mid-transition).
@@ -362,18 +353,16 @@ class LiveLoop:
 
         asleep = reading.state is BattleState.SINGLE and reading.bars[0].status is Status.SLP
 
-        # poll the chat for the EXACT turn number when visible. Back off when the
-        # chat keeps reading nothing (minimized / wrong tab) so the wasted OCR
-        # doesn't slow the loop and the menu fallback stays responsive.
-        chat_interval = CHAT_OCR_INTERVAL_S if self._chat_misses < 4 else CHAT_OCR_IDLE_S
-        if now - self.last_chat_ocr >= chat_interval:
-            chat_turn = read_turn_number(frame, self.cal.chat)
-            self._chat_misses = 0 if chat_turn is not None else self._chat_misses + 1
+        # Chat turn is a CORRECTION only: the slow OCR runs on a background thread
+        # (submit when free, pick up the result when ready) so it never blocks. It
+        # only raises the count (a missed turn); the fast menu drives the live value.
+        self.chat.submit(frame)
+        chat_turn = self.chat.poll()
+        if chat_turn is not None:
             before = self.turns.turns_completed
             self.turns.observe(chat_turn, asleep)
             if self.debug and self.turns.turns_completed > before:
                 print(f"[dbg] chat -> turn {self.turns.turns_completed + 1} (read {chat_turn})")
-            self.last_chat_ocr = now
 
         # Template-match the in-viewport text box EVERY frame (~10 ms): drives the
         # chat-independent turn counter (command menu reappears each turn) and catch
@@ -480,7 +469,11 @@ def run(
     overlay = Overlay([b["name"] for b in load_balls()])
     loop = LiveLoop(species_override, status_override, cal, overlay, debug=debug)
     loop.start()
-    sys.exit(app.exec())
+    try:
+        code = app.exec()
+    finally:
+        loop.chat.shutdown()
+    sys.exit(code)
 
 
 def main() -> None:
