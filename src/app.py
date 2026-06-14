@@ -1,13 +1,16 @@
-"""ShakeChecker console app: WAITING -> IDLE -> BATTLE state machine.
+"""ShakeChecker: WAITING -> IDLE -> BATTLE state machine driving the overlay.
 
-Watches the PokeMMO window and prints per-ball catch probabilities for the
-current wild battle. HP%, HP colour and enemy status are read from the screen;
-the species (base catch rate) is given on the command line:
+Watches the PokeMMO window and, during a wild battle, shows per-ball catch
+probabilities in a click-through overlay docked to the game window (and mirrors
+them to the console as a debug log). Species, HP%, status and turn are read from
+the screen; everything can be overridden from the command line:
 
-    python src/app.py --species Onix       # status auto-detected from screen
-    python src/app.py --species Onix --status slp   # override the detection
-    python src/app.py --rate 45            # raw base catch rate instead
-    python src/app.py --list-windows       # diagnose window detection
+    python src/app.py                      # auto: identify species via OCR
+    python src/app.py --species Onix        # override the detected species
+    python src/app.py --species Onix --status slp   # override the detection too
+    python src/app.py --rate 45             # raw base catch rate instead
+    python src/app.py --image fixtures/x.png  # offline: analyse one PNG (no overlay)
+    python src/app.py --list-windows        # diagnose window detection
 """
 
 from __future__ import annotations
@@ -19,6 +22,9 @@ import json
 import sys
 import time
 from pathlib import Path
+
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication
 
 from battle_log import read_battle_text, read_turn_number
 from battle_reader import (
@@ -32,6 +38,7 @@ from battle_reader import (
 from catch_calc import BattleContext, ball_multiplier, catch_probability
 from hp_settler import HpSettler
 from name_reader import NameReader
+from overlay import Overlay
 from turn_tracker import TurnTracker
 from window_capture import (
     WINDOW_TITLE,
@@ -205,139 +212,193 @@ def list_windows() -> None:
         print(f"  selected client rect: {get_client_rect(picked)}")
 
 
-def run(species_override: dict | None, status_override: str | None, cal: Calibration) -> None:
-    balls = load_balls()
-    status_rates = load_status_rates()
-    name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
-    capture = WindowCapture()
-    state = AppState.WAITING
-    hwnd: int | None = None
-    last_seen_battle = 0.0
-    last_chat_ocr = 0.0
-    last_battle_text_ocr = 0.0
-    last_line = ""
-    cached: dict | None = None  # enemy for the current battle
-    turns = TurnTracker()
-    hp = HpSettler()
-    caught_handled = False  # printed the catch message this battle
+class LiveLoop:
+    """One poll step per QTimer tick: capture -> read -> update overlay + console.
 
-    species_src = f"override {species_override['name']}" if species_override else "OCR from screen"
-    status_src = f"override {status_override}" if status_override else "detected from screen"
-    print(f"species: {species_src}, status: {status_src}")
-    print("waiting for PokeMMO window...")
+    Driven by a QTimer (not a blocking while-loop) so the Qt event loop keeps
+    running between steps and the overlay's animated sprite plays. State that the
+    old loop kept in locals lives on the instance. The console output is retained
+    as a debug log alongside the overlay.
+    """
 
-    while True:
-        if state is AppState.WAITING:
-            hwnd = find_pokemmo_hwnd()
-            if hwnd is None:
-                time.sleep(WAITING_POLL_S)
-                continue
+    def __init__(
+        self,
+        species_override: dict | None,
+        status_override: str | None,
+        cal: Calibration,
+        overlay: Overlay,
+    ) -> None:
+        self.species_override = species_override
+        self.status_override = status_override
+        self.cal = cal
+        self.overlay = overlay
+        self.balls = load_balls()
+        self.status_rates = load_status_rates()
+        self.name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
+        self.capture = WindowCapture()
+
+        self.state = AppState.WAITING
+        self.hwnd: int | None = None
+        self.last_seen_battle = 0.0
+        self.last_chat_ocr = 0.0
+        self.last_battle_text_ocr = 0.0
+        self.last_line = ""
+        self.cached: dict | None = None  # enemy for the current battle
+        self.turns = TurnTracker()
+        self.hp = HpSettler()
+        self.caught_handled = False
+
+    def start(self) -> None:
+        species_src = (
+            f"override {self.species_override['name']}"
+            if self.species_override
+            else "OCR from screen"
+        )
+        status_src = f"override {self.status_override}" if self.status_override else "from screen"
+        print(f"species: {species_src}, status: {status_src}")
+        print("waiting for PokeMMO window...")
+        QTimer.singleShot(0, self.step)
+
+    def step(self) -> None:
+        interval_s = self._tick()
+        QTimer.singleShot(int(interval_s * 1000), self.step)
+
+    def _frame_interval(self) -> float:
+        return BATTLE_FRAME_S if self.state is AppState.BATTLE else IDLE_FRAME_S
+
+    def _tick(self) -> float:
+        if self.state is AppState.WAITING:
+            self.hwnd = find_pokemmo_hwnd()
+            if self.hwnd is None:
+                return WAITING_POLL_S
             print("PokeMMO window found")
-            state = AppState.IDLE
+            self.state = AppState.IDLE
 
-        assert hwnd is not None
-        rect = get_client_rect(hwnd)
+        assert self.hwnd is not None
+        rect = get_client_rect(self.hwnd)
         if rect is None:
-            if not is_window_alive(hwnd):
+            if not is_window_alive(self.hwnd):
                 print("window lost, waiting...")
-                state = AppState.WAITING
-                hwnd = None
-            time.sleep(WAITING_POLL_S)
-            continue
+                self.state = AppState.WAITING
+                self.hwnd = None
+                self.overlay.hide_battle()
+            return WAITING_POLL_S
 
-        frame = capture.grab(rect)
+        frame = self.capture.grab(rect)
         now = time.monotonic()
-
-        reading = read_battle(frame, cal)
+        reading = read_battle(frame, self.cal)
         has_bar = reading.state in (BattleState.SINGLE, BattleState.MULTI)
-        # Enter a battle only when an enemy HP bar is actually detected (the
-        # login screen / menus have a dark bottom panel too, so the panel alone
-        # is not enough). Once in battle, the panel keeps us in through intro and
-        # attack animations when the bar momentarily vanishes.
-        panel = is_battle_ui_present(frame, cal.battle_ui)
+        # Enter a battle only when an enemy HP bar is actually detected (the login
+        # screen / menus have a dark bottom panel too). Once in battle, the panel
+        # keeps us in through intro/attack animations when the bar momentarily
+        # vanishes.
+        panel = is_battle_ui_present(frame, self.cal.battle_ui)
 
-        if has_bar or (state is AppState.BATTLE and panel):
-            last_seen_battle = now
-            if state is not AppState.BATTLE:
-                state = AppState.BATTLE
-                cached = None  # new battle: re-identify the species
-                last_line = ""
-                turns.reset()
-                hp.reset()
-                last_chat_ocr = 0.0
-                last_battle_text_ocr = 0.0
-                caught_handled = False
-                print("battle detected")
-
-            asleep = reading.state is BattleState.SINGLE and reading.bars[0].status is Status.SLP
-
-            # poll the chat (throttled) for the EXACT turn number when visible.
-            # The catch is NOT read here: the chat log lags ~1s and at the catch
-            # moment still shows the previous battle's catch line.
-            if now - last_chat_ocr >= CHAT_OCR_INTERVAL_S:
-                turns.observe(read_turn_number(frame, cal.chat), asleep)
-                last_chat_ocr = now
-
-            # One OCR of the in-viewport text box (throttled) drives both the
-            # chat-independent turn counter (command menu reappears each turn) and
-            # catch detection ("Gotcha! / X was caught!"). Both belong to the
-            # current frame; see [battle_text] in calibration.toml.
-            if now - last_battle_text_ocr >= BATTLE_TEXT_OCR_INTERVAL_S:
-                last_battle_text_ocr = now
-                bt = read_battle_text(frame, cal.battle_text)
-                turns.observe_menu(bt.menu_present)
-                if bt.caught and not caught_handled and cached is not None:
-                    print(f"caught {cached['name']}!")
-                    caught_handled = True
-                    last_line = ""
-
-            if caught_handled:
-                pass  # enemy caught: stop updating; battle ends when the UI clears
-            elif reading.state is BattleState.SINGLE:
-                bar = reading.bars[0]
-                hp_pct = hp.update(bar.hp_pct)  # wait for the bar to settle
-                status = status_override or bar.status.value
-                if species_override is not None:
-                    cached = species_override
-                elif cached is None:
-                    assert name_reader is not None
-                    sp = name_reader.read(frame, bar)
-                    if sp is not None:
-                        cached = sp
-                        print(f"identified: {sp['name']} (catch rate {sp['catch_rate']})")
-
-                turn_note = f"turn {turns.turns_completed + 1}"
-                if turns.turns_asleep:
-                    turn_note += f", asleep {turns.turns_asleep}"
-                if cached is None:
-                    line = f"{'?':12.12s} HP {hp_pct:5.1f}% [{status}]  ({turn_note})"
-                else:
-                    ctx = battle_context(
-                        cached,
-                        turns_completed=turns.turns_completed,
-                        turns_asleep=turns.turns_asleep,
-                    )
-                    probs = ball_probs(
-                        hp_pct, cached["catch_rate"], status_rates[status], balls, ctx
-                    )
-                    line = f"[{turn_note}] " + format_line(cached["name"], hp_pct, status, probs)
-                if line != last_line:
-                    print(line)
-                    last_line = line
-            elif reading.state is BattleState.MULTI and last_line != "multi":
-                print("multiple enemy bars (horde/double): ignored in v1")
-                last_line = "multi"
-            # NO_BATTLE while the overlay is up = intro/animation: keep last line
-        elif state is AppState.BATTLE and now - last_seen_battle > BATTLE_END_GRACE_S:
-            state = AppState.IDLE
-            last_line = ""
-            cached = None
-            # after a catch we already printed "caught X!"; don't also say ended
-            if not caught_handled:
+        if has_bar or (self.state is AppState.BATTLE and panel):
+            self.last_seen_battle = now
+            if self.state is not AppState.BATTLE:
+                self._enter_battle()
+            self._battle_step(frame, reading, rect, now)
+        elif self.state is AppState.BATTLE and now - self.last_seen_battle > BATTLE_END_GRACE_S:
+            self.state = AppState.IDLE
+            self.last_line = ""
+            self.cached = None
+            if not self.caught_handled:  # after a catch we already said "caught X!"
                 print("battle ended")
-            caught_handled = False
+            self.caught_handled = False
+            self.overlay.hide_battle()
 
-        time.sleep(BATTLE_FRAME_S if state is AppState.BATTLE else IDLE_FRAME_S)
+        return self._frame_interval()
+
+    def _enter_battle(self) -> None:
+        self.state = AppState.BATTLE
+        self.cached = None  # new battle: re-identify the species
+        self.last_line = ""
+        self.turns.reset()
+        self.hp.reset()
+        self.last_chat_ocr = 0.0
+        self.last_battle_text_ocr = 0.0
+        self.caught_handled = False
+        print("battle detected")
+
+    def _battle_step(self, frame, reading, rect, now: float) -> None:
+        asleep = reading.state is BattleState.SINGLE and reading.bars[0].status is Status.SLP
+
+        # poll the chat (throttled) for the EXACT turn number when visible. The
+        # catch is NOT read here: the chat log lags ~1s and at the catch moment
+        # still shows the previous battle's catch line.
+        if now - self.last_chat_ocr >= CHAT_OCR_INTERVAL_S:
+            self.turns.observe(read_turn_number(frame, self.cal.chat), asleep)
+            self.last_chat_ocr = now
+
+        # One OCR of the in-viewport text box (throttled) drives both the chat-
+        # independent turn counter (command menu reappears each turn) and catch
+        # detection ("Gotcha! / X was caught!"). See [battle_text] in calibration.
+        if now - self.last_battle_text_ocr >= BATTLE_TEXT_OCR_INTERVAL_S:
+            self.last_battle_text_ocr = now
+            bt = read_battle_text(frame, self.cal.battle_text)
+            self.turns.observe_menu(bt.menu_present)
+            if bt.caught and not self.caught_handled and self.cached is not None:
+                print(f"caught {self.cached['name']}!")
+                self.caught_handled = True
+                self.last_line = ""
+
+        if self.caught_handled:
+            return  # enemy caught: stop updating; battle ends when the UI clears
+        if reading.state is BattleState.SINGLE:
+            self._update_single(frame, reading.bars[0], rect)
+        elif reading.state is BattleState.MULTI and self.last_line != "multi":
+            print("multiple enemy bars (horde/double): ignored in v1")
+            self.last_line = "multi"
+            self.overlay.hide_battle()  # not a catchable v1 scenario
+        # NO_BATTLE while in battle = intro/animation: keep the overlay as is
+
+    def _update_single(self, frame, bar, rect) -> None:
+        hp_pct = self.hp.update(bar.hp_pct)  # wait for the bar to settle
+        status = self.status_override or bar.status.value
+        if self.species_override is not None:
+            self.cached = self.species_override
+        elif self.cached is None:
+            assert self.name_reader is not None
+            sp = self.name_reader.read(frame, bar)
+            if sp is not None:
+                self.cached = sp
+                print(f"identified: {sp['name']} (catch rate {sp['catch_rate']})")
+
+        turn_note = f"turn {self.turns.turns_completed + 1}"
+        if self.turns.turns_asleep:
+            turn_note += f", asleep {self.turns.turns_asleep}"
+        if self.cached is None:
+            line = f"{'?':12.12s} HP {hp_pct:5.1f}% [{status}]  ({turn_note})"
+        else:
+            ctx = battle_context(
+                self.cached,
+                turns_completed=self.turns.turns_completed,
+                turns_asleep=self.turns.turns_asleep,
+            )
+            probs = ball_probs(
+                hp_pct, self.cached["catch_rate"], self.status_rates[status], self.balls, ctx
+            )
+            line = f"[{turn_note}] " + format_line(self.cached["name"], hp_pct, status, probs)
+            self.overlay.show_battle(
+                self.cached.get("id", -1),
+                self.cached["name"],
+                self.cached["catch_rate"],
+                self.turns.turns_completed + 1,
+                dict(probs),
+            )
+            self.overlay.dock_to(rect.left, rect.top, rect.width)
+        if line != self.last_line:
+            print(line)
+            self.last_line = line
+
+
+def run(species_override: dict | None, status_override: str | None, cal: Calibration) -> None:
+    app = QApplication(sys.argv[:1])
+    overlay = Overlay([b["name"] for b in load_balls()])
+    loop = LiveLoop(species_override, status_override, cal, overlay)
+    loop.start()
+    sys.exit(app.exec())
 
 
 def main() -> None:
