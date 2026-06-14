@@ -378,7 +378,7 @@ class LiveLoop:
         # detection ("Gotcha!"). See [battle_text] / BattleTextReader.
         bt = self.battle_text.read(frame)
         before = self.turns.turns_completed
-        self.turns.observe_menu(bt.menu_present)
+        self.turns.observe_menu(bt.menu_present, bt.action)
         # Decide trainer vs wild ONCE per battle, and only while the command menu is
         # up: then the scene is static, so the party-icon strip below the bar is
         # reliable. Checking during animations gave false positives.

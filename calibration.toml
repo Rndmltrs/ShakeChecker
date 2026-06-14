@@ -175,6 +175,11 @@ left = 0.04
 right = 0.60
 menu_match_min = 0.72
 catch_match_min = 0.72
+# "used" appears in a committed action's narration ("X used Y!", incl. the enemy's
+# counter-attack each turn). It confirms a real turn so a bag/Pokemon browse that
+# is opened and cancelled (no action) does NOT advance the turn. Action 1.0 vs
+# <=0.60 otherwise.
+action_match_min = 0.72
 
 [name]
 # Enemy name region: right of the status badge, above the bar. Relative to the

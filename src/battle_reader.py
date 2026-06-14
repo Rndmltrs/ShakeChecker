@@ -65,6 +65,7 @@ class BattleText:
 
     menu_present: bool  # command menu up == waiting for input (turn start)
     caught: bool  # capture banner ("Gotcha!")
+    action: bool  # a committed-action narration ("X used Y!") -> a real turn ran
 
 
 class HsvCalibration(BaseModel):
@@ -164,6 +165,7 @@ class BattleTextCalibration(BaseModel):
     right: float
     menu_match_min: float  # template-match score to call the command menu present
     catch_match_min: float  # template-match score to call the catch banner present
+    action_match_min: float  # template-match score to call a committed action ("used")
 
 
 class TrainerCalibration(BaseModel):
@@ -431,7 +433,8 @@ class BattleTextReader:
         d = Path(templates_dir)
         self._menu_tpl = cv2.imread(str(d / "menu_fight.png"), cv2.IMREAD_GRAYSCALE)
         self._catch_tpl = cv2.imread(str(d / "catch_gotcha.png"), cv2.IMREAD_GRAYSCALE)
-        if self._menu_tpl is None or self._catch_tpl is None:
+        self._action_tpl = cv2.imread(str(d / "action_used.png"), cv2.IMREAD_GRAYSCALE)
+        if self._menu_tpl is None or self._catch_tpl is None or self._action_tpl is None:
             raise FileNotFoundError(f"missing battle-text templates in {d}")
 
     def read(self, frame_bgr: np.ndarray) -> BattleText:
@@ -439,11 +442,12 @@ class BattleTextReader:
         h, w = frame_bgr.shape[:2]
         band = frame_bgr[int(h * c.top) : int(h * c.bottom), int(w * c.left) : int(w * c.right)]
         if band.size == 0:
-            return BattleText(menu_present=False, caught=False)
+            return BattleText(menu_present=False, caught=False, action=False)
         gray = cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
         return BattleText(
             menu_present=self._match(gray, self._menu_tpl) >= c.menu_match_min,
             caught=self._match(gray, self._catch_tpl) >= c.catch_match_min,
+            action=self._match(gray, self._action_tpl) >= c.action_match_min,
         )
 
     @staticmethod
