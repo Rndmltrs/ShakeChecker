@@ -9,15 +9,15 @@ from overlay import Overlay, phys_to_logical, prob_color_hex, status_badge, subh
 
 def test_prob_color_thresholds():
     assert prob_color_hex(0.0) == "#ff5555"  # red
-    assert prob_color_hex(0.49) == "#ff5555"
-    assert prob_color_hex(0.50) == "#ffcc44"  # yellow
-    assert prob_color_hex(0.74) == "#ffcc44"
-    assert prob_color_hex(0.75) == "#55dd66"  # green
+    assert prob_color_hex(0.34) == "#ff5555"
+    assert prob_color_hex(0.35) == "#ffcc44"  # yellow
+    assert prob_color_hex(0.65) == "#ffcc44"
+    assert prob_color_hex(0.66) == "#55dd66"  # green
     assert prob_color_hex(1.0) == "#55dd66"
 
 
 def test_subheader_text():
-    assert subheader_text(75, 2) == "Rate: 75   ·   Turn 2"
+    assert subheader_text(75, 2) == "Rate: 75  ·  Turn 2"
 
 
 # --- widget smoke tests (need a QApplication) ---

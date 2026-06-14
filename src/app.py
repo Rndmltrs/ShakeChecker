@@ -364,6 +364,12 @@ class LiveLoop:
             if sp is not None:
                 self.cached = sp
                 print(f"identified: {sp['name']} (catch rate {sp['catch_rate']})")
+        elif self.cached.get("level") is None and self.name_reader is not None:
+            # species known but the level OCR missed it that frame; keep trying
+            # (a clearer later frame usually yields it). Drives the Nest Ball.
+            sp = self.name_reader.read(frame, bar)
+            if sp is not None and sp.get("level") is not None and sp["name"] == self.cached["name"]:
+                self.cached["level"] = sp["level"]
 
         turn_note = f"turn {self.turns.turns_completed + 1}"
         if self.turns.turns_asleep:

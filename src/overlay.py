@@ -48,16 +48,16 @@ _RED, _YELLOW, _GREEN = "#ff5555", "#ffcc44", "#55dd66"
 
 
 def prob_color_hex(prob: float) -> str:
-    """Colour hint for a catch probability (0-1): <50% red, 50-75% yellow, >=75% green."""
-    if prob < 0.50:
+    """Colour hint for a catch probability (0-1): <35% red, 35-66% yellow, >=66% green."""
+    if prob < 0.35:
         return _RED
-    if prob < 0.75:
+    if prob < 0.66:
         return _YELLOW
     return _GREEN
 
 
 def subheader_text(catch_rate: int, turn: int) -> str:
-    return f"Rate: {catch_rate}   ·   Turn {turn}"
+    return f"Rate: {catch_rate}  ·  Turn {turn}"
 
 
 # Status code -> (label, badge background) following the in-game colour scheme.
