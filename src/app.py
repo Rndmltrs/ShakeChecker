@@ -258,7 +258,8 @@ class LiveLoop:
         self.turns = TurnTracker()
         self.hp = HpSettler()
         self.status = StatusSettler()
-        self.caught_handled = False
+        self._caught_printed = False  # printed "caught X!" this battle
+        self._catch_streak = 0  # consecutive frames the catch banner was seen
         self.dusk_active = False  # cave/night -> Dusk Ball boost
         self._loc_read = False  # location OCR'd this battle yet
         self._chat_misses = 0  # consecutive chat reads with no turn (chat hidden?)
@@ -323,9 +324,9 @@ class LiveLoop:
             self.state = AppState.IDLE
             self.last_line = ""
             self.cached = None
-            if not self.caught_handled:  # after a catch we already said "caught X!"
+            if not self._caught_printed:  # after a catch we already said "caught X!"
                 print("battle ended")
-            self.caught_handled = False
+            self._caught_printed = False
             self.overlay.hide_battle()
 
         return self._frame_interval()
@@ -338,7 +339,8 @@ class LiveLoop:
         self.hp.reset()
         self.status.reset()
         self.last_chat_ocr = 0.0
-        self.caught_handled = False
+        self._caught_printed = False
+        self._catch_streak = 0
         self.dusk_active = False
         self._loc_read = False
         self._chat_misses = 0
@@ -394,18 +396,15 @@ class LiveLoop:
                 self._dbg_menu = bt.menu_present
             if self.turns.turns_completed > before:
                 print(f"[dbg] menu -> turn {self.turns.turns_completed + 1}")
-        if bt.caught and not self.caught_handled and self.cached is not None:
+        # Catch: announce once when the "Gotcha!" banner holds for 2+ frames (a
+        # single stray match never triggers it). This does NOT freeze the overlay
+        # -- the loop keeps updating so the turn still self-corrects from the chat;
+        # the battle ends on its own when the UI clears (grace).
+        self._catch_streak = self._catch_streak + 1 if bt.caught else 0
+        if self._catch_streak >= 2 and not self._caught_printed and self.cached is not None:
             print(f"caught {self.cached['name']}!")
-            self.caught_handled = True
-            self.last_line = ""
-        elif self.caught_handled and bt.menu_present:
-            # the command menu is back -> the battle is still going, so the catch
-            # was a false positive. Un-latch and resume instead of staying stuck.
-            self.caught_handled = False
-            self.last_line = ""
+            self._caught_printed = True
 
-        if self.caught_handled:
-            return  # enemy caught: stop updating; battle ends when the UI clears
         if reading.state is BattleState.SINGLE:
             if self._is_trainer:
                 self.overlay.hide_battle()  # trainer: nothing catchable
