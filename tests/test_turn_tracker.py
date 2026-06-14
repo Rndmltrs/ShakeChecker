@@ -160,22 +160,37 @@ def feed_menu(t: TurnTracker, presence: list[bool]) -> None:
         t.observe_menu(p)
 
 
+def start_battle(t: TurnTracker) -> None:
+    """The battle intro keeps the menu absent (sending out the Pokemon, switch-in
+    abilities), then it appears for turn 1. That first appearance is turn 1."""
+    feed_menu(t, [False] * 10 + [True])
+
+
 def commit_turn(t: TurnTracker) -> None:
-    """Simulate one committed turn: the menu is gone for a sustained action
-    animation (>= the gate), then returns for the next turn's prompt."""
+    """One committed turn: the menu is gone for a sustained action animation
+    (>= the gate), then returns for the next turn's prompt."""
     feed_menu(t, [False] * GATE + [True])
+
+
+def test_first_menu_appearance_after_long_intro_is_turn_one():
+    # regression: the long pre-menu absence (e.g. opponent Intimidate at switch-in)
+    # must NOT be counted as a completed turn -> stays turn 1, not turn 2
+    t = TurnTracker(menu_absent_samples_for_turn=GATE)
+    start_battle(t)
+    assert t.turns_completed == 0
 
 
 def test_menu_present_whole_time_counts_nothing():
     # player sits at the menu and does nothing: turn must NOT advance
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
+    start_battle(t)
     feed_menu(t, [True] * 20)
     assert t.turns_completed == 0
 
 
 def test_menu_counts_each_committed_turn():
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
-    t.observe_menu(True)  # turn 1 prompt
+    start_battle(t)  # turn 1 prompt
     assert t.turns_completed == 0
     commit_turn(t)  # turn 1 -> committed, turn 2 prompt
     assert t.turns_completed == 1
@@ -186,6 +201,7 @@ def test_menu_counts_each_committed_turn():
 def test_brief_menu_absence_does_not_count():
     # OCR flicker / sprite-animation frame / chat toggle: menu absent only briefly
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
+    start_battle(t)
     feed_menu(t, [True, False, True])  # 1 absent sample
     feed_menu(t, [True, False, False, True])  # 2 absent samples
     feed_menu(t, [True] + [False] * (GATE - 1) + [True])  # just under the gate
@@ -195,12 +211,14 @@ def test_brief_menu_absence_does_not_count():
 def test_absence_must_be_contiguous():
     # a flicker back to "present" resets the run, so scattered absences don't add up
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
+    start_battle(t)
     feed_menu(t, [False, False, True, False, False, True])
     assert t.turns_completed == 0
 
 
 def test_chat_overrides_menu_count_upward():
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
+    start_battle(t)
     commit_turn(t)  # menu count -> 1
     t.observe(5, enemy_asleep=False)  # chat is authoritative
     assert t.turns_completed == 4
@@ -209,14 +227,17 @@ def test_chat_overrides_menu_count_upward():
 def test_menu_count_never_lowers_chat_value():
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
     t.observe(5, enemy_asleep=False)
+    start_battle(t)
     commit_turn(t)  # would be turn 2 from menu, must not reduce 4
     assert t.turns_completed == 4
 
 
 def test_menu_count_survives_reset():
     t = TurnTracker(menu_absent_samples_for_turn=GATE)
+    start_battle(t)
     commit_turn(t)
     assert t.turns_completed == 1
     t.reset()
-    feed_menu(t, [True] * 10)  # fresh battle, sitting at the menu
+    start_battle(t)  # fresh battle: intro then turn 1 prompt
+    feed_menu(t, [True] * 10)
     assert t.turns_completed == 0

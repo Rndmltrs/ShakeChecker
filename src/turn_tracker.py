@@ -40,6 +40,7 @@ class TurnTracker:
     _turn_number: int = 1  # highest 1-based turn seen this battle
     _menu_turns: int = 0  # turns counted from command-menu reappearances
     _menu_absent_run: int = 0  # consecutive observations with the menu absent
+    _menu_seen: bool = False  # has the command menu appeared yet this battle
 
     def reset(self) -> None:
         """Call at the start of each battle."""
@@ -48,6 +49,7 @@ class TurnTracker:
         self._turn_number = 1
         self._menu_turns = 0
         self._menu_absent_run = 0
+        self._menu_seen = False
 
     def observe(self, turn_number: int | None, enemy_asleep: bool) -> None:
         """Fold in one frame's chat observation.
@@ -74,9 +76,16 @@ class TurnTracker:
         least `menu_absent_samples_for_turn` observations in a row — long enough
         that a real action ran. This only raises turns_completed; the exact chat
         value (observe) still overrides it upward.
+
+        The menu's FIRST appearance is turn 1 and never counts, no matter how
+        long it was absent beforehand: the whole battle intro (sending out the
+        Pokemon, resolving switch-in abilities like Intimidate) precedes it, and
+        that long pre-menu absence must not be mistaken for a completed turn.
         """
         if menu_present:
-            if self._menu_absent_run >= self.menu_absent_samples_for_turn:
+            if not self._menu_seen:
+                self._menu_seen = True  # turn 1 prompt; pre-battle absence is not a turn
+            elif self._menu_absent_run >= self.menu_absent_samples_for_turn:
                 self._menu_turns += 1
                 self.turns_completed = max(self.turns_completed, self._menu_turns)
             self._menu_absent_run = 0
