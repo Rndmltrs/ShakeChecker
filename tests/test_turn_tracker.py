@@ -4,7 +4,12 @@ from pathlib import Path
 
 import cv2
 
-from battle_log import parse_chat, parse_turn_number, read_chat, read_turn_number
+from battle_log import (
+    is_catch_banner,
+    parse_turn_number,
+    read_catch_banner,
+    read_turn_number,
+)
 from battle_reader import load_calibration
 from turn_tracker import TurnTracker
 
@@ -23,29 +28,33 @@ def test_read_turn_number_none_in_overworld():
     assert read_turn_number(img, CAL.chat) is None
 
 
-def test_parse_chat_detects_catch():
-    assert parse_chat(["[Battle] Gotcha! Rhyhorn was caught!"]).caught is True
-    assert parse_chat(["[Battle] Geodude was caught!"]).caught is True
-    assert parse_chat(["[Battle] Turn 2 started!", "Cascoon used Tackle!"]).caught is False
-    assert parse_chat([]).caught is False
+def test_is_catch_banner_keywords():
+    # OCR mangles "Gotcha"->"Gotoha" and splits/drops "was"; detection keys on
+    # the surviving "caught"/"gotcha" tokens, not the exact phrase.
+    assert is_catch_banner(["Gotoha!", "Rhyhorn", "sEm", "Caught!"]) is True
+    assert is_catch_banner(["Gotcha!", "Shellos was caught!"]) is True
+    # a faint (the other reason the bar vanishes) must NOT read as a catch
+    assert is_catch_banner(["Cascoon", "fainted!"]) is False
+    assert is_catch_banner(["It's super effective!"]) is False
+    assert is_catch_banner([]) is False
 
 
-def test_parse_chat_extracts_caught_species():
-    assert parse_chat(["[Battle] Gotcha! Rhyhorn was caught!"]).caught_name == "Rhyhorn"
-    assert parse_chat(["[Battle] Geodude was caught!"]).caught_name == "Geodude"
-    assert parse_chat(["Turn 2 started!"]).caught_name is None
-
-
-def test_read_chat_detects_catch_fixture():
+def test_read_catch_banner_detects_catch_fixture():
     img = cv2.imread(
         str(ROOT / "fixtures" / "batle_action_pokemon_catched_text_after pokeball_disapeared.png")
     )
-    assert read_chat(img, CAL.chat).caught is True
+    assert read_catch_banner(img, CAL.narration) is True
 
 
-def test_read_chat_no_catch_in_normal_battle():
+def test_read_catch_banner_false_before_text_appears():
+    # ball resting on the field, no catch text yet -> not a catch
+    img = cv2.imread(str(ROOT / "fixtures" / "batle_action_pokemon_catched_dark_pokeballpng.png"))
+    assert read_catch_banner(img, CAL.narration) is False
+
+
+def test_read_catch_banner_no_catch_in_normal_battle():
     img = cv2.imread(str(ROOT / "fixtures" / "full_health_no_status.png"))
-    assert read_chat(img, CAL.chat).caught is False
+    assert read_catch_banner(img, CAL.narration) is False
 
 
 def test_parse_turn_number():

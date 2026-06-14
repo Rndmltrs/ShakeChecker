@@ -127,6 +127,23 @@ left = 0.0
 right = 0.40
 upscale = 2
 
+[narration]
+# In-viewport battle narration box ("Gotcha! / X was caught!", "X fainted!",
+# move messages). Unlike the chat log (bottom-left), this box updates IMMEDIATELY
+# and belongs to the current frame -- the chat log lags by ~1s and still shows the
+# PREVIOUS battle's catch line at the moment a new Pokemon is caught, so the catch
+# MUST be read from here, not the chat. The box sits at the bottom of the centered
+# battle viewport. Band calibrated from batle_action_pokemon_catched_text_after
+# pokeball_disapeared.png (2117x1435: "Gotcha!/Rhyhorn was caught!" at y 0.58-0.74,
+# x 0.10-0.45) plus the live Shellos catch (~3:2 window); kept generous for window
+# -size variation. OCR misreads "Gotcha"->"Gotoha" and drops "was", so detection
+# keys on the "caught"/"gotcha" keywords, not the exact phrase.
+top = 0.55
+bottom = 0.80
+left = 0.05
+right = 0.60
+upscale = 2
+
 [name]
 # Enemy name region: right of the status badge, above the bar. Relative to the
 # bar fill-start x and mid-row y (fixed-size UI). The crop spans name + "Lv. NN"

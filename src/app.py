@@ -20,9 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from rapidfuzz import fuzz
-
-from battle_log import read_chat, read_turn_number
+from battle_log import read_catch_banner, read_turn_number
 from battle_reader import (
     BattleState,
     Calibration,
@@ -61,6 +59,9 @@ BATTLE_END_GRACE_S = 1.5
 # Chat OCR is comparatively expensive; turns change slowly, so poll it at most
 # this often rather than every battle frame.
 CHAT_OCR_INTERVAL_S = 1.0
+# The catch banner is read from the in-viewport narration box (read_catch_banner).
+# It shows for ~1.5-2s, so sampling a few times a second reliably catches it.
+NARRATION_OCR_INTERVAL_S = 0.5
 
 
 class AppState(enum.Enum):
@@ -213,12 +214,11 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
     hwnd: int | None = None
     last_seen_battle = 0.0
     last_chat_ocr = 0.0
+    last_narration_ocr = 0.0
     last_line = ""
     cached: dict | None = None  # enemy for the current battle
     turns = TurnTracker()
     hp = HpSettler()
-    caught_seen = False  # latest chat catch reading
-    caught_name: str | None = None  # species named in the catch line
     caught_handled = False  # printed the catch message this battle
 
     species_src = f"override {species_override['name']}" if species_override else "OCR from screen"
@@ -265,7 +265,7 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
                 turns.reset()
                 hp.reset()
                 last_chat_ocr = 0.0
-                caught_seen = False
+                last_narration_ocr = 0.0
                 caught_handled = False
                 print("battle detected")
 
@@ -273,29 +273,27 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
             turns.observe_bar(has_bar)
             asleep = reading.state is BattleState.SINGLE and reading.bars[0].status is Status.SLP
 
-            # poll the chat (throttled): turn number + catch event. Done outside
-            # the SINGLE branch so a catch is still seen once the enemy bar is gone.
+            # poll the chat (throttled) for the turn number only. The catch is
+            # NOT read here: the chat log lags ~1s and at the catch moment still
+            # shows the previous battle's catch line — see read_catch_banner.
             if now - last_chat_ocr >= CHAT_OCR_INTERVAL_S:
-                chat = read_chat(frame, cal.chat)
-                turns.observe(chat.turn_number, asleep)
-                caught_seen = chat.caught
-                caught_name = chat.caught_name
+                turns.observe(read_turn_number(frame, cal.chat), asleep)
                 last_chat_ocr = now
 
-            # A catch is confirmed when the chat's "X was caught!" names the
-            # current enemy (the bar lingers during the catch, so we match the
-            # species instead — this also ignores a stale catch line from the
-            # previous battle, whose name won't match the new enemy).
+            # Catch detection from the in-viewport narration banner ("Gotcha! /
+            # X was caught!"), which belongs to the current frame. The enemy bar
+            # lingers during the catch, so we read it while still "in battle";
+            # the banner means THIS enemy (already identified) was caught.
             if (
-                caught_seen
-                and not caught_handled
+                not caught_handled
                 and cached is not None
-                and caught_name is not None
-                and fuzz.ratio(caught_name.lower(), cached["name"].lower()) >= 80
+                and now - last_narration_ocr >= NARRATION_OCR_INTERVAL_S
             ):
-                print(f"caught {cached['name']}!")
-                caught_handled = True
-                last_line = ""
+                last_narration_ocr = now
+                if read_catch_banner(frame, cal.narration):
+                    print(f"caught {cached['name']}!")
+                    caught_handled = True
+                    last_line = ""
 
             if caught_handled:
                 pass  # enemy caught: stop updating; battle ends when the UI clears
@@ -341,8 +339,6 @@ def run(species_override: dict | None, status_override: str | None, cal: Calibra
             # after a catch we already printed "caught X!"; don't also say ended
             if not caught_handled:
                 print("battle ended")
-            caught_seen = False
-            caught_name = None
             caught_handled = False
 
         time.sleep(BATTLE_FRAME_S if state is AppState.BATTLE else IDLE_FRAME_S)
