@@ -398,6 +398,11 @@ class LiveLoop:
             print(f"caught {self.cached['name']}!")
             self.caught_handled = True
             self.last_line = ""
+        elif self.caught_handled and bt.menu_present:
+            # the command menu is back -> the battle is still going, so the catch
+            # was a false positive. Un-latch and resume instead of staying stuck.
+            self.caught_handled = False
+            self.last_line = ""
 
         if self.caught_handled:
             return  # enemy caught: stop updating; battle ends when the UI clears

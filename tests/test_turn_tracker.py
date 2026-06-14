@@ -75,6 +75,13 @@ def test_template_no_catch_before_text_or_in_normal_battle():
     assert _bt("full_health_no_status.png").caught is False
 
 
+def test_template_no_false_catch_on_switch_or_run():
+    # "Gotcha!" must not be confused with "Go! Y!" (switch) or "Got away!" (run);
+    # a false catch would latch the overlay and never end the battle.
+    assert _bt("batle_action_pokemon_switch_2_new_pokemon_enters.png").caught is False
+    assert _bt("batle_action_run_selected.png").caught is False
+
+
 def test_template_detects_committed_action():
     # a committed action ("X used Y!" / "Go! Y!") -> a real turn ran
     assert _bt("batle_action_attack_selected.png").action is True  # "used"

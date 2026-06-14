@@ -174,7 +174,10 @@ bottom = 0.82
 left = 0.04
 right = 0.60
 menu_match_min = 0.72
-catch_match_min = 0.72
+# catch ("Gotcha!") must NOT fire on a switch's "Go! Y!" (shares "Go", ~0.77) --
+# the real banner scores 1.0, so 0.85 separates it. A false catch would latch the
+# overlay and never end the battle.
+catch_match_min = 0.85
 # A committed action's narration confirms a real turn (so a bag/Pokemon browse
 # opened and cancelled does NOT advance it). Two templates: "used" ("X used Y!",
 # incl. the enemy's counter each turn) and "Go!" (sending a Pokemon on a switch).
