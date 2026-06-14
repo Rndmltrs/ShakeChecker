@@ -17,7 +17,7 @@ def test_prob_color_thresholds():
 
 
 def test_subheader_text():
-    assert subheader_text(75, 2) == "Catch 75   ·   Turn 2"
+    assert subheader_text(75, 2) == "Rate: 75   ·   Turn 2"
 
 
 # --- widget smoke tests (need a QApplication) ---

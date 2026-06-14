@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from sprite_loader import SpriteLoader
 
-SPRITE_H = 72  # Pokemon sprite height (px)
+SPRITE_H = 40  # Pokemon sprite height (px) — kept compact so the panel stays small
 BALL_H = 26  # ball icon height (px)
 DOCK_MARGIN = 12  # gap from the game window's top-right corner
 
@@ -38,7 +38,7 @@ def prob_color_hex(prob: float) -> str:
 
 
 def subheader_text(catch_rate: int, turn: int) -> str:
-    return f"Catch {catch_rate}   ·   Turn {turn}"
+    return f"Rate: {catch_rate}   ·   Turn {turn}"
 
 
 class Overlay(QWidget):
