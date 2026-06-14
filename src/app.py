@@ -227,14 +227,11 @@ class LiveLoop:
         status_override: str | None,
         cal: Calibration,
         overlay: Overlay,
-        debug: bool = False,
     ) -> None:
         self.species_override = species_override
         self.status_override = status_override
         self.cal = cal
         self.overlay = overlay
-        self.debug = debug
-        self._dbg_menu = False  # last logged command-menu state
         self.balls = load_balls()
         self.status_rates = load_status_rates()
         self.name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
@@ -360,15 +357,11 @@ class LiveLoop:
         self.chat.submit(frame)
         chat_turn = self.chat.poll()
         if chat_turn is not None:
-            before = self.turns.turns_completed
             self.turns.observe(chat_turn, asleep)
-            if self.debug and self.turns.turns_completed > before:
-                print(f"[dbg] chat -> turn {self.turns.turns_completed + 1} (read {chat_turn})")
 
         # `bt` (menu/action/catch templates, ~10 ms) was read in the loop and is
         # passed in: it drives the chat-independent turn counter (command menu
         # reappears each turn) and catch detection ("Gotcha!").
-        before = self.turns.turns_completed
         # Count menu turns only in a SINGLE battle. During a horde (MULTI) the
         # multi-target attack/faint animation makes the menu flicker repeatedly,
         # which would over-count; the chat tracks the real turn through the horde,
@@ -384,12 +377,6 @@ class LiveLoop:
             self._trainer_decided = True
             if self._is_trainer:
                 print("trainer battle: overlay hidden")
-        if self.debug:
-            if bt.menu_present != self._dbg_menu:
-                print(f"[dbg] command menu {'DETECTED' if bt.menu_present else 'gone'}")
-                self._dbg_menu = bt.menu_present
-            if self.turns.turns_completed > before:
-                print(f"[dbg] menu -> turn {self.turns.turns_completed + 1}")
         # Catch: announce once when the "Gotcha!" banner holds for 2+ frames (a
         # single stray match never triggers it). This does NOT freeze the overlay
         # -- the loop keeps updating so the turn still self-corrects from the chat;
@@ -468,11 +455,10 @@ def run(
     species_override: dict | None,
     status_override: str | None,
     cal: Calibration,
-    debug: bool = False,
 ) -> None:
     app = QApplication(sys.argv[:1])
     overlay = Overlay([b["name"] for b in load_balls()])
-    loop = LiveLoop(species_override, status_override, cal, overlay, debug=debug)
+    loop = LiveLoop(species_override, status_override, cal, overlay)
     loop.start()
     try:
         code = app.exec()
@@ -505,11 +491,6 @@ def main() -> None:
         action="store_true",
         help="diagnostic: list visible windows and PokeMMO matches, then exit",
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="log how each turn is counted (chat vs command menu) and menu detection",
-    )
     args = parser.parse_args()
 
     if args.list_windows:
@@ -531,7 +512,7 @@ def main() -> None:
 
     set_dpi_awareness()
     try:
-        run(species_override, args.status, cal, debug=args.debug)
+        run(species_override, args.status, cal)
     except KeyboardInterrupt:
         sys.exit(0)
 
