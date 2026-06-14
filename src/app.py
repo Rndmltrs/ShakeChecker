@@ -67,9 +67,10 @@ BATTLE_FRAME_S = 0.2  # ~5 fps
 # which is stable through intro/animations. Only end the battle once that panel
 # has been gone continuously for this long (covers fade-out transitions).
 BATTLE_END_GRACE_S = 1.5
-# Chat OCR is comparatively expensive; turns change slowly, so poll it at most
-# this often rather than every battle frame.
-CHAT_OCR_INTERVAL_S = 1.0
+# Chat OCR gives the EXACT turn the instant "Turn N started!" prints, so poll it
+# briskly — the overlay's turn should update within a fraction of a second of the
+# new turn, not a full second later. (No over-count risk: the chat is exact.)
+CHAT_OCR_INTERVAL_S = 0.4
 # The in-viewport text box (command menu + catch banner) is OCR'd at most this
 # often. Fast enough to catch the menu each turn and the ~1.5-2s catch banner.
 BATTLE_TEXT_OCR_INTERVAL_S = 0.3
