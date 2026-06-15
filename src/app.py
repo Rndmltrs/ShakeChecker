@@ -33,6 +33,7 @@ from battle_reader import (
     BattleTextReader,
     Calibration,
     Status,
+    is_battle_ui_present,
     is_trainer_battle,
     load_calibration,
     read_battle,
@@ -73,11 +74,14 @@ USERDATA = ROOT / "userdata"  # per-account caught lists + active-account config
 WAITING_POLL_S = 2.0
 IDLE_FRAME_S = 0.5  # ~2 fps
 BATTLE_FRAME_S = 0.2  # ~5 fps
-# End the battle once the battle-specific signals (enemy bar + menu/action/catch
-# templates) have all been gone this long — short, so the catch overlay clears
-# promptly after a faint/flee. Mid-battle the menu/action text bridges animation
-# gaps, so this only really spans the end-of-battle fade.
+# How long the battle-specific signals (enemy bar + menu/action/catch templates)
+# must ALL be gone before the battle ends. Short when the battle UI panel is
+# already gone (back to the overworld -> clear the catch overlay promptly), but
+# long while the dark command panel is still up: a 2-turn move (Fly/Dig/Solarbeam)
+# hides the enemy bar with no menu for a couple seconds mid-battle, and that panel
+# stays, so we must NOT end the battle then.
 BATTLE_END_GRACE_S = 1.0
+BATTLE_ANIM_GRACE_S = 4.0
 # Trainer battles cycle through several Pokemon with multi-second gaps (faint +
 # "sent out") that have no battle signal; a longer grace keeps those gaps from
 # ending the battle (which would flash the overlays and re-run trainer detection).
@@ -287,7 +291,9 @@ class LiveLoop:
         overlay: Overlay,
         dex: DexSession | None = None,
         dex_panel: DexPanel | None = None,
+        debug: bool = False,
     ) -> None:
+        self.debug = debug
         self.species_override = species_override
         self.status_override = status_override
         self.cal = cal
@@ -378,12 +384,22 @@ class LiveLoop:
         bt = self.battle_text.read(frame)
         in_battle = has_bar or bt.menu_present or bt.action or bt.caught
 
-        # A trainer battle has several Pokemon: between them the enemy bar/menu
-        # vanish for a few seconds (faint + "sent out"). Use a longer grace once a
-        # trainer is detected so those gaps don't end the battle (which would flash
-        # both overlays and re-trigger detection each time). _is_trainer stays
-        # latched between battle frames, so this is right for the not-in-battle case.
-        grace = TRAINER_END_GRACE_S if self._is_trainer else BATTLE_END_GRACE_S
+        # Pick the battle-end grace:
+        #  - trainer battle: long (Pokemon swaps between faints leave a gap);
+        #  - else if the dark command panel is still up: long -- we're mid-battle in
+        #    an animation (2-turn move hides the bar with no menu), DON'T end;
+        #  - else (panel gone -> truly back in the overworld): short, so the catch
+        #    overlay clears quickly.
+        # The panel only sets the grace; it never extends in_battle/last_seen, so a
+        # dark cave (where the panel reads present in the overworld too) still ends
+        # the battle after the long grace rather than never.
+        ui_present = is_battle_ui_present(frame, self.cal.battle_ui)
+        if self._is_trainer:
+            grace = TRAINER_END_GRACE_S
+        elif ui_present:
+            grace = BATTLE_ANIM_GRACE_S
+        else:
+            grace = BATTLE_END_GRACE_S
         if in_battle:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
@@ -482,9 +498,10 @@ class LiveLoop:
         self.chat.submit(frame)
         chat_turn = self.chat.poll()
         if chat_turn is not None:
-            if chat_turn != self._last_chat_turn:  # diagnostic: shows the chat IS read
+            if self.debug and chat_turn != self._last_chat_turn:  # shows the chat IS read
                 self._last_chat_turn = chat_turn
-                print(f"chat: Turn {chat_turn}  (counter at Turn {self.turns.turns_completed + 1})")
+                shown = self.turns.turns_completed + 1
+                print(f"[dbg] chat: Turn {chat_turn}  (counter at Turn {shown})")
             completed = chat_turn - 1
             cur = self.turns.turns_completed
             if completed > cur:
@@ -516,6 +533,8 @@ class LiveLoop:
         self.turns.observe_menu(self._menu_stable, bt.action)
         if self.turns.turns_completed > before:
             self._last_advance = now  # for the chat down-correction guard
+            if self.debug:
+                print(f"[dbg] menu -> Turn {self.turns.turns_completed + 1}")
         # Decide trainer vs wild ONCE per battle, and only while the command menu is
         # up: then the scene is static, so the party-icon strip below the bar is
         # reliable. Checking during animations gave false positives.
@@ -694,13 +713,14 @@ def run(
     status_override: str | None,
     cal: Calibration,
     account: str | None = None,
+    debug: bool = False,
 ) -> None:
     app = QApplication(sys.argv[:1])
     overlay = Overlay([b["name"] for b in load_balls()])
     dex = build_dex(account)
     dex_panel = DexPanel() if dex is not None else None
     loop = LiveLoop(
-        species_override, status_override, cal, overlay, dex=dex, dex_panel=dex_panel
+        species_override, status_override, cal, overlay, dex=dex, dex_panel=dex_panel, debug=debug
     )
     loop.start()
     try:
@@ -739,6 +759,11 @@ def main() -> None:
         help="PokeMMO account/character for the dex caught-list (remembered; "
         "defaults to the last used)",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="verbose turn-counter diagnostics (chat reads, menu advances)",
+    )
     args = parser.parse_args()
 
     if args.list_windows:
@@ -760,7 +785,7 @@ def main() -> None:
 
     set_dpi_awareness()
     try:
-        run(species_override, args.status, cal, account=args.account)
+        run(species_override, args.status, cal, account=args.account, debug=args.debug)
     except KeyboardInterrupt:
         sys.exit(0)
 
