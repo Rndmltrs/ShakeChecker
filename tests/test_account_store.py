@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from account_store import AccountConfig, CaughtStore, _safe_account
+from account_store import AccountConfig, CaughtStore, _safe_account, delete_account_data
 
 # --- account name sanitizing ---
 
@@ -67,6 +67,35 @@ def test_resolve_active_falls_back_to_remembered(tmp_path):
 
 def test_resolve_active_none_on_first_run(tmp_path):
     assert AccountConfig.load(tmp_path).resolve_active() is None
+
+
+def test_delete_removes_and_repoints_active(tmp_path):
+    cfg = AccountConfig.load(tmp_path)
+    cfg.use("Red")
+    cfg.use("Blue")  # active = Blue
+    cfg.delete("Blue")  # deleting the active one -> falls back to a remaining
+    reloaded = AccountConfig.load(tmp_path)
+    assert reloaded.accounts == ["Red"]
+    assert reloaded.active == "Red"
+
+
+def test_delete_last_account_clears_active(tmp_path):
+    cfg = AccountConfig.load(tmp_path)
+    cfg.use("Red")
+    cfg.delete("Red")
+    reloaded = AccountConfig.load(tmp_path)
+    assert reloaded.accounts == []
+    assert reloaded.active is None
+
+
+def test_delete_account_data_removes_caught_folder(tmp_path):
+    store = CaughtStore.for_account(tmp_path, "Red")
+    store.add(1)
+    assert store.path.exists()
+    delete_account_data(tmp_path, "Red")
+    assert not store.path.parent.exists()
+    # a fresh store for the same name starts empty again
+    assert CaughtStore.for_account(tmp_path, "Red").caught == set()
 
 
 # --- CaughtStore ---

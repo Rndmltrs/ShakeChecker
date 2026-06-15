@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 # Keep account ids filesystem-safe (they become directory names).
@@ -67,6 +68,21 @@ class AccountConfig:
         if override:
             return self.use(override)
         return self.active
+
+    def delete(self, name: str) -> None:
+        """Remove an account from the known list and persist. If it was active,
+        the active one falls back to the first remaining account, else None."""
+        if name in self.accounts:
+            self.accounts.remove(name)
+        if self.active == name:
+            self.active = self.accounts[0] if self.accounts else None
+        self.save()
+
+
+def delete_account_data(userdata_dir: Path | str, account: str) -> None:
+    """Delete an account's stored caught list (its accounts/<account>/ folder)."""
+    folder = Path(userdata_dir) / "accounts" / _safe_account(account)
+    shutil.rmtree(folder, ignore_errors=True)
 
 
 class CaughtStore:

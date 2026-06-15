@@ -26,7 +26,7 @@ from pathlib import Path
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
-from account_store import AccountConfig, CaughtStore
+from account_store import AccountConfig, CaughtStore, delete_account_data
 from battle_log import AsyncChatReader, read_turn_number
 from battle_reader import (
     BattleState,
@@ -329,6 +329,7 @@ class LiveLoop:
             self.dex_panel.on_toggle_caught = self._dex_toggle_caught
             self.dex_panel.on_select_profile = self._dex_use_profile
             self.dex_panel.on_create_profile = self._dex_use_profile
+            self.dex_panel.on_delete_profile = self._dex_delete_profile
             self.dex_panel.get_profiles = self._dex_profiles
 
     def start(self) -> None:
@@ -690,6 +691,18 @@ class LiveLoop:
         if self.dex is not None:
             self.dex.set_caught(CaughtStore.for_account(USERDATA, account))
         print(f"dex: active account '{account}'")
+        self._refresh_dex_panel()
+
+    def _dex_delete_profile(self, name: str) -> None:
+        """Delete a profile and its caught list; if it was active, switch to a
+        remaining one (or a fresh 'default')."""
+        cfg = AccountConfig.load(USERDATA)
+        cfg.delete(name)
+        delete_account_data(USERDATA, name)
+        account = cfg.active or cfg.use("default")
+        if self.dex is not None:
+            self.dex.set_caught(CaughtStore.for_account(USERDATA, account))
+        print(f"dex: deleted profile '{name}', active now '{account}'")
         self._refresh_dex_panel()
 
     def _dex_profiles(self) -> tuple[str | None, list[str]]:

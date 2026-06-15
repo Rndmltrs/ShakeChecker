@@ -21,18 +21,19 @@ Preview without the game:  python src/dex_panel.py
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import win32con
 import win32gui
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QCursor, QFont, QFontMetrics
+from PyQt6.QtCore import QPointF, QSize, Qt, QTimer
+from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
-    QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -83,6 +84,42 @@ def rarity_color_hex(rarity: str) -> str:
     return _RARITY_COLOR.get(rarity, _DEFAULT_COLOR)
 
 
+def _icon_pixmap(kind: str, size: int, color: str) -> QPixmap:
+    """A small monochrome header icon drawn in the overlay's own colour (so it
+    matches the panel instead of an OS emoji): 'gear' (profiles) or 'info'."""
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    c = QColor(color)
+    cx = cy = size / 2
+    if kind == "gear":
+        ring = QPen(c, size * 0.15)
+        p.setPen(ring)
+        p.drawEllipse(QPointF(cx, cy), size * 0.25, size * 0.25)
+        teeth = QPen(c, size * 0.14)
+        teeth.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(teeth)
+        for i in range(8):
+            a = i * math.pi / 4
+            p.drawLine(
+                QPointF(cx + math.cos(a) * size * 0.33, cy + math.sin(a) * size * 0.33),
+                QPointF(cx + math.cos(a) * size * 0.46, cy + math.sin(a) * size * 0.46),
+            )
+    else:  # info
+        p.setPen(QPen(c, size * 0.10))
+        p.drawEllipse(QPointF(cx, cy), size * 0.42, size * 0.42)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(c)
+        p.drawEllipse(QPointF(cx, cy - size * 0.19), size * 0.065, size * 0.065)  # dot
+        stem = QPen(c, size * 0.13)
+        stem.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(stem)
+        p.drawLine(QPointF(cx, cy - size * 0.02), QPointF(cx, cy + size * 0.22))
+    p.end()
+    return pm
+
+
 class _ClickRow(QWidget):
     """A row that reports clicks (for per-species manual check-off)."""
 
@@ -107,12 +144,14 @@ class DexPanel(QWidget):
         self._last_pos: tuple[int, int] | None = None
         self._click_through: bool | None = None  # current WS_EX_TRANSPARENT state
         self._legend: QWidget | None = None
+        self._profiles: QWidget | None = None  # profile management popup
         self._rows: list[dict] = []  # reused row-widget pool, grown as needed
 
         # callbacks the app wires in (no-ops until set)
         self.on_toggle_caught: Callable[[int], None] | None = None
         self.on_select_profile: Callable[[str], None] | None = None
         self.on_create_profile: Callable[[str], None] | None = None
+        self.on_delete_profile: Callable[[str], None] | None = None
         self.get_profiles: Callable[[], tuple[str | None, list[str]]] | None = None
 
         self.setWindowFlags(
@@ -145,15 +184,18 @@ class DexPanel(QWidget):
         root.addWidget(panel)
         self._col = QVBoxLayout(panel)
 
-        # top icon bar: stretch + profile (gear) + info
+        # top icon bar: stretch + profile (gear) + info. Icons are drawn (not OS
+        # emoji) in apply_scale so they match the panel's colour/style.
         self._bar = QHBoxLayout()
         self._bar.addStretch(1)
-        self._profile_btn = QPushButton("⚙")  # gear
-        self._profile_btn.setToolTip("Profile: create / load")
-        self._profile_btn.clicked.connect(self._open_profile_menu)
-        self._info_btn = QPushButton("ℹ")  # info
+        self._profile_btn = QPushButton()
+        self._profile_btn.setToolTip("Profiles: create / load / delete")
+        self._profile_btn.clicked.connect(self._toggle_profiles)
+        self._info_btn = QPushButton()
         self._info_btn.setToolTip("Rarity colour legend")
         self._info_btn.clicked.connect(self._toggle_legend)
+        for b in (self._profile_btn, self._info_btn):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
         self._bar.addWidget(self._profile_btn)
         self._bar.addWidget(self._info_btn)
         self._col.addLayout(self._bar)
@@ -206,9 +248,11 @@ class DexPanel(QWidget):
         self._way_fm = QFontMetrics(self._font(self._px(BASE_SUB_PX)))
         self._title.setFont(self._font(self._px(BASE_TITLE_PX), bold=True))
         self._subtitle.setFont(self._font(self._px(BASE_SUB_PX)))
-        icon_font = self._font(self._px(BASE_ICON_PX))
-        self._profile_btn.setFont(icon_font)
-        self._info_btn.setFont(icon_font)
+        isz = self._px(BASE_ICON_PX)
+        for btn, kind in ((self._profile_btn, "gear"), (self._info_btn, "info")):
+            btn.setIcon(QIcon(_icon_pixmap(kind, isz, "#cfd2d6")))
+            btn.setIconSize(QSize(isz, isz))
+            btn.setFixedSize(isz + self._px(6), isz + self._px(6))
         self._col.setContentsMargins(
             self._px(BASE_MARGIN_X), self._px(BASE_MARGIN_Y),
             self._px(BASE_MARGIN_X), self._px(BASE_MARGIN_Y),
@@ -252,8 +296,9 @@ class DexPanel(QWidget):
 
     def hide_panel(self) -> None:
         self._hover.stop()
-        if self._legend is not None:
-            self._legend.hide()
+        for popup in (self._legend, self._profiles):
+            if popup is not None:
+                popup.hide()
         for r in self._rows:  # stop GIFs while hidden; they reload on re-show
             self._clear_row_sprite(r)
         self.hide()
@@ -279,8 +324,9 @@ class DexPanel(QWidget):
         if not self.isVisible():
             return
         over = self.frameGeometry().contains(QCursor.pos())
-        if self._legend is not None and self._legend.isVisible():
-            over = over or self._legend.frameGeometry().contains(QCursor.pos())
+        for popup in (self._legend, self._profiles):
+            if popup is not None and popup.isVisible():
+                over = over or popup.frameGeometry().contains(QCursor.pos())
         self._apply_click_through(not over)
 
     def _apply_click_through(self, on: bool) -> None:
@@ -299,25 +345,74 @@ class DexPanel(QWidget):
         if dex is not None and self.on_toggle_caught is not None:
             self.on_toggle_caught(dex)
 
-    def _open_profile_menu(self) -> None:
-        active, accounts = self.get_profiles() if self.get_profiles else (None, [])
-        menu = QMenu(self)
-        for name in accounts:
-            act = menu.addAction(("● " if name == active else "   ") + name)
-            act.triggered.connect(lambda _checked=False, n=name: self._select_profile(n))
-        if accounts:
-            menu.addSeparator()
-        menu.addAction("New profile…").triggered.connect(self._create_profile)
-        menu.exec(self._profile_btn.mapToGlobal(self._profile_btn.rect().bottomLeft()))
+    def _toggle_profiles(self) -> None:
+        if self._profiles is not None and self._profiles.isVisible():
+            self._profiles.hide()
+            return
+        self._open_profiles()
 
-    def _select_profile(self, name: str) -> None:
+    def _open_profiles(self) -> None:
+        # rebuilt each time so it reflects the current profile list
+        if self._profiles is not None:
+            self._profiles.close()
+        self._profiles = self._build_profiles()
+        self._profiles.move(self._profile_btn.mapToGlobal(self._profile_btn.rect().bottomLeft()))
+        self._profiles.show()
+
+    def _build_profiles(self) -> QWidget:
+        active, accounts = self.get_profiles() if self.get_profiles else (None, [])
+        w, box = self._popup_window("profiles")
+        head = QLabel("Profiles")
+        head.setFont(self._font(12, bold=True))
+        head.setStyleSheet("color: #ffffff;")
+        box.addWidget(head)
+        for name in accounts:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            sw = QPushButton(("● " if name == active else "    ") + name)
+            sw.setFont(self._font(12))
+            sw.setCursor(Qt.CursorShape.PointingHandCursor)
+            sw.setStyleSheet("QPushButton { text-align: left; }")
+            sw.clicked.connect(lambda _=False, n=name: self._choose_profile(n))
+            minus = QPushButton("−")
+            minus.setFont(self._font(14, bold=True))
+            minus.setCursor(Qt.CursorShape.PointingHandCursor)
+            minus.setToolTip(f"Delete profile '{name}'")
+            minus.setFixedWidth(20)
+            minus.clicked.connect(lambda _=False, n=name: self._remove_profile(n))
+            row.addWidget(sw, 1)
+            row.addWidget(minus)
+            cont = QWidget()
+            cont.setLayout(row)
+            box.addWidget(cont)
+        new = QPushButton("+  New profile…")
+        new.setFont(self._font(12))
+        new.setCursor(Qt.CursorShape.PointingHandCursor)
+        new.setStyleSheet("QPushButton { text-align: left; color: #9aa0aa; }")
+        new.clicked.connect(self._create_profile)
+        box.addWidget(new)
+        return w
+
+    def _choose_profile(self, name: str) -> None:
         if self.on_select_profile is not None:
             self.on_select_profile(name)
+        if self._profiles is not None:
+            self._profiles.hide()
+
+    def _remove_profile(self, name: str) -> None:
+        ok = QMessageBox.question(
+            self, "Delete profile", f"Delete profile '{name}' and its caught list?"
+        )
+        if ok == QMessageBox.StandardButton.Yes and self.on_delete_profile is not None:
+            self.on_delete_profile(name)
+            self._open_profiles()  # rebuild with the updated list
 
     def _create_profile(self) -> None:
         name, ok = QInputDialog.getText(self, "New profile", "Account name:")
         if ok and name.strip() and self.on_create_profile is not None:
             self.on_create_profile(name.strip())
+        if self._profiles is not None:
+            self._profiles.hide()
 
     def _toggle_legend(self) -> None:
         if self._legend is None:
@@ -328,7 +423,8 @@ class DexPanel(QWidget):
         self._legend.move(self._info_btn.mapToGlobal(self._info_btn.rect().bottomRight()))
         self._legend.show()
 
-    def _build_legend(self) -> QWidget:
+    def _popup_window(self, obj_name: str) -> tuple[QWidget, QVBoxLayout]:
+        """A frameless dark popup matching the panel; returns (window, content box)."""
         w = QWidget(None)
         w.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -336,13 +432,23 @@ class DexPanel(QWidget):
             | Qt.WindowType.Tool
         )
         w.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        frame = QFrame(w, objectName="legend")
-        frame.setStyleSheet("#legend { background: rgba(18,18,20,225); border-radius: 8px; }")
+        frame = QFrame(w, objectName=obj_name)
+        frame.setStyleSheet(
+            f"#{obj_name} {{ background: rgba(18,18,20,238); border-radius: 8px; }}"
+            " QLabel { color: #eeeeee; background: transparent; }"
+            " QPushButton { color: #cfd2d6; background: transparent; border: none; }"
+            " QPushButton:hover { color: #ffffff; }"
+        )
         outer = QVBoxLayout(w)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
         box = QVBoxLayout(frame)
         box.setContentsMargins(10, 8, 12, 8)
+        box.setSpacing(3)
+        return w, box
+
+    def _build_legend(self) -> QWidget:
+        w, box = self._popup_window("legend")
         head = QLabel("Rarity")
         head.setFont(self._font(12, bold=True))
         head.setStyleSheet("color: #ffffff;")
