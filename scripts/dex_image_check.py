@@ -90,7 +90,7 @@ def main() -> None:
             print(f"  {len(view.missing)} still needed")
             shown = view.missing if args.all else view.missing[:SHOWN_MAX]
             for m in shown:
-                print(f"    #{m.id:<4} {m.name:<13} {'/'.join(m.methods)}")
+                print(f"    #{m.id:<4} {m.name:<13} {'/'.join(m.ways)}")
             extra = len(view.missing) - len(shown)
             if extra > 0:
                 print(f"    +{extra}")

@@ -54,7 +54,7 @@ def main() -> None:
     print(f"  {len(missing)} still needed here")
     shown = missing if args.all else missing[:SHOWN_MAX]
     for m in shown:
-        print(f"  #{m.id:<4} {m.name:<14} {'/'.join(m.methods)}")
+        print(f"  #{m.id:<4} {m.name:<14} {'/'.join(m.ways)}")
     extra = len(missing) - len(shown)
     if extra > 0:
         print(f"  +{extra}")

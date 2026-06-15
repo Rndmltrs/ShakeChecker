@@ -11,12 +11,19 @@ ENCOUNTERS = ROOT / "src" / "data" / "encounters.json"
 LEGENDARIES = ROOT / "src" / "data" / "legendaries.json"
 
 
-def enc(id, name, method="Grass", periods=("MORNING", "DAY", "NIGHT"), seasons=(0, 1, 2, 3)):
+def enc(
+    id,
+    name,
+    method="Grass",
+    rarity="Common",
+    periods=("MORNING", "DAY", "NIGHT"),
+    seasons=(0, 1, 2, 3),
+):
     return {
         "id": id,
         "name": name,
         "method": method,
-        "rarity": "Common",
+        "rarity": rarity,
         "min_level": 5,
         "max_level": 5,
         "periods": list(periods),
@@ -43,16 +50,33 @@ def test_excludes_caught_and_legendaries():
     assert [m.id for m in missing] == [16]
 
 
-def test_dedupes_by_species_and_collects_methods_sorted_by_id():
+def test_dedupes_by_species_and_collects_ways_sorted_by_id():
     encs = [
-        enc(16, "Pidgey", method="Grass"),
+        enc(16, "Pidgey", method="Grass"),  # default walking -> no tag
         enc(16, "Pidgey", method="Dark Grass"),
         enc(1, "Bulbasaur", method="Grass"),
     ]
     missing = compute_missing(encs, "DAY", 0, caught=set(), legendaries=set())
     assert [m.id for m in missing] == [1, 16]  # dex order
-    pidgey = next(m for m in missing if m.id == 16)
-    assert pidgey.methods == ("Dark Grass", "Grass")
+    assert next(m for m in missing if m.id == 1).ways == ()  # plain grass
+    assert next(m for m in missing if m.id == 16).ways == ("Dark Grass",)
+
+
+def test_ways_label_lure_special_pheno_and_rods():
+    encs = [
+        enc(1, "Bulbasaur", method="Grass", rarity="Lure"),
+        enc(2, "Surskit", method="Grass"),  # plain grass -> no tag
+        enc(2, "Surskit", method="Water"),  # surf
+        enc(3, "Magikarp", method="Old Rod", rarity="Very Common"),
+        enc(4, "Audino", method="Grass", rarity="Special"),  # rustling-grass pheno
+        enc(5, "Drilbur", method="Dust Cloud", rarity="Special"),
+    ]
+    by = {m.id: m.ways for m in compute_missing(encs, "DAY", 0, set(), set())}
+    assert by[1] == ("Lure",)
+    assert by[2] == ("Water",)  # grass dropped, surf kept
+    assert by[3] == ("Old Rod",)
+    assert by[4] == ("Grass Pheno",)
+    assert by[5] == ("Dust Pheno",)
 
 
 def test_empty_when_all_caught():

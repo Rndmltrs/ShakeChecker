@@ -33,7 +33,7 @@ MATCH_THRESHOLD = 82.0
 class MissingEntry:
     id: int  # National Dex id (sort key / display order)
     name: str
-    methods: tuple[str, ...]  # encounter methods it appears under here (Grass, Water, ...)
+    ways: tuple[str, ...]  # how to encounter it here; empty = plain grass/cave walking
 
 
 def _normalize(name: str) -> str:
@@ -48,6 +48,32 @@ def _digits(name: str) -> tuple[str, ...]:
     """The number tokens in a name. 'route 5' -> ('5',). Used to keep fuzzy
     matching from collapsing 'Route 5' into 'Route 35' (a substring win)."""
     return tuple(re.findall(r"\d+", name))
+
+
+# A "Special"-rarity encounter is a roaming phenomenon; label it by its method.
+_PHENO = {
+    "Grass": "Grass Pheno",
+    "Water": "Water Pheno",
+    "Shadow": "Shadow Pheno",
+    "Dust Cloud": "Dust Pheno",
+    "Fishing": "Fishing Pheno",
+}
+# Ambient walking encounters at normal rarity -- the default, so no tag.
+_WALK = {"Grass", "Cave", "Inside"}
+
+
+def encounter_tag(method: str, rarity: str) -> str:
+    """A short label for HOW to find a species via one encounter, or "" for the
+    default (walking in plain grass/cave). Phenomena (Special rarity) read as
+    "<Pheno>", Lure spawns as "Lure", and everything non-walking (surf Water,
+    fishing rods, Headbutt, Rocks, Honey Tree, Dark Grass, Shadow) as the method."""
+    if rarity == "Special":
+        return _PHENO.get(method, f"{method} Pheno")
+    if rarity == "Lure":
+        return "Lure"
+    if method in _WALK:
+        return ""
+    return method
 
 
 def available_here(encounters: list[dict], period: str, season: int) -> list[dict]:
@@ -65,16 +91,18 @@ def compute_missing(
     legendaries: set[int],
 ) -> list[MissingEntry]:
     """Species available now that are neither legendary nor already caught,
-    deduped by id (collecting the methods) and sorted by dex id."""
+    deduped by id (collecting the non-default encounter ways) and sorted by dex id."""
     by_id: dict[int, dict] = {}
     for e in available_here(encounters, period, season):
         pid = e["id"]
         if pid in caught or pid in legendaries:
             continue
-        slot = by_id.setdefault(pid, {"name": e["name"], "methods": set()})
-        slot["methods"].add(e["method"])
+        slot = by_id.setdefault(pid, {"name": e["name"], "ways": set()})
+        tag = encounter_tag(e["method"], e["rarity"])
+        if tag:
+            slot["ways"].add(tag)
     return [
-        MissingEntry(pid, slot["name"], tuple(sorted(slot["methods"])))
+        MissingEntry(pid, slot["name"], tuple(sorted(slot["ways"])))
         for pid, slot in sorted(by_id.items())
     ]
 

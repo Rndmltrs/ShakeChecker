@@ -6,13 +6,13 @@ from dex_tracker import MissingEntry
 from game_time import Period
 
 
-def view(missing):
+def view(missing, ways=()):
     return LocationView(
         route="VIRIDIAN FOREST",
         region="KANTO",
         period=Period.DAY,
         season=0,
-        missing=[MissingEntry(i, n, ("Grass",)) for i, n in missing],
+        missing=[MissingEntry(i, n, ways) for i, n in missing],
     )
 
 
@@ -32,6 +32,20 @@ def test_lists_few_without_plus():
     assert "#1    Bulbasaur" in text
     assert "#16   Pidgey" in text
     assert "+" not in text
+
+
+def test_plain_grass_entries_show_no_note():
+    # plain grass -> empty ways -> no parens on the entry line
+    text = dex_panel_text(view([(1, "Bulbasaur")], ways=()))
+    assert "(" not in text.split("needed")[1]
+
+
+def test_ways_are_shown_in_parens():
+    assert "Tentacool (Water)" in dex_panel_text(view([(72, "Tentacool")], ways=("Water",)))
+    rods = dex_panel_text(view([(129, "Magikarp")], ways=("Good Rod", "Old Rod")))
+    assert "Magikarp (Good Rod/Old Rod)" in rods
+    assert "Bulbasaur (Lure)" in dex_panel_text(view([(1, "Bulbasaur")], ways=("Lure",)))
+    assert "Audino (Grass Pheno)" in dex_panel_text(view([(531, "Audino")], ways=("Grass Pheno",)))
 
 
 def test_caps_at_five_and_collapses_rest():

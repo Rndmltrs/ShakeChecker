@@ -132,11 +132,18 @@ def dex_panel_text(view: LocationView | None) -> str:
     if not view.missing:
         return header + "\n  (all caught here!)"
     shown = view.missing[:DEX_SHOWN_MAX]
-    lines = [header, *[f"  #{m.id:<4} {m.name}" for m in shown]]
+    lines = [header, *[f"  #{m.id:<4} {m.name}{_ways_note(m.ways)}" for m in shown]]
     extra = len(view.missing) - len(shown)
     if extra > 0:
         lines.append(f"  +{extra}")
     return "\n".join(lines)
+
+
+def _ways_note(ways: tuple[str, ...]) -> str:
+    """Parenthesised non-default encounter ways for an entry, e.g. ' (Water)',
+    ' (Good Rod/Old Rod)', ' (Lure)', ' (Grass Pheno)'. Empty for plain
+    grass/cave walking (dex_tracker.encounter_tag already dropped those)."""
+    return f" ({'/'.join(ways)})" if ways else ""
 
 
 def format_line(name: str, hp_pct: float, status: str, probs: list[tuple[str, float]]) -> str:
