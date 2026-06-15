@@ -327,6 +327,7 @@ class LiveLoop:
         self._is_trainer = False  # trainer battle -> overlay hidden
         self._trainer_decided = False  # trainer vs wild settled this battle
         self._ot_checked = False  # enemy's OT-caught icon checked this battle
+        self._was_horde = False  # read_battle horde hint (read every tick, so init here)
         self._last_loc_check = 0.0  # last IDLE location OCR (throttle)
         self._dex_log = ""  # last printed dex panel text (console dedup)
         self._last_hud = ""  # last HUD location seen (to refresh the panel on a toggle)
