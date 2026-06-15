@@ -77,6 +77,10 @@ BATTLE_FRAME_S = 0.2  # ~5 fps
 # templates) have all been gone this long — covers brief animation gaps without
 # lingering too long after a faint/flee.
 BATTLE_END_GRACE_S = 2.0
+# Trainer battles cycle through several Pokemon with multi-second gaps (faint +
+# "sent out") that have no battle signal; a longer grace keeps those gaps from
+# ending the battle (which would flash the overlays and re-run trainer detection).
+TRAINER_END_GRACE_S = 6.0
 # Location OCR for the dex panel is comparatively expensive and the location
 # changes slowly, so refresh it at most this often while walking around (IDLE).
 DEX_LOC_INTERVAL_S = 2.5
@@ -364,12 +368,18 @@ class LiveLoop:
         bt = self.battle_text.read(frame)
         in_battle = has_bar or bt.menu_present or bt.action or bt.caught
 
+        # A trainer battle has several Pokemon: between them the enemy bar/menu
+        # vanish for a few seconds (faint + "sent out"). Use a longer grace once a
+        # trainer is detected so those gaps don't end the battle (which would flash
+        # both overlays and re-trigger detection each time). _is_trainer stays
+        # latched between battle frames, so this is right for the not-in-battle case.
+        grace = TRAINER_END_GRACE_S if self._is_trainer else BATTLE_END_GRACE_S
         if in_battle:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
                 self._enter_battle()
             self._battle_step(frame, reading, bt, client_rect)
-        elif self.state is AppState.BATTLE and now - self.last_seen_battle > BATTLE_END_GRACE_S:
+        elif self.state is AppState.BATTLE and now - self.last_seen_battle > grace:
             self.state = AppState.IDLE
             self.last_line = ""
             self.cached = None
@@ -475,10 +485,13 @@ class LiveLoop:
                 self.dex.record_caught(self.cached["id"])
 
         if reading.state is BattleState.SINGLE:
-            if self._is_trainer:
-                self.overlay.hide_battle()  # trainer: nothing catchable
-            else:
+            # Negative test: only show the catch overlay once we're SURE it's a
+            # wild battle (trainer detection has run and said "not trainer"). This
+            # avoids briefly flashing the overlay before a trainer is confirmed.
+            if self._trainer_decided and not self._is_trainer:
                 self._update_single(frame, reading.bars[0], rect)
+            else:
+                self.overlay.hide_battle()
         elif reading.state is BattleState.MULTI and self.last_line != "multi":
             # horde / double: wait until a single wild Pokemon remains
             print("multiple enemy bars (horde): waiting for one to remain")

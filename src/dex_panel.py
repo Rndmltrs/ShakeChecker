@@ -74,7 +74,7 @@ BASE_MARGIN_X = 12
 BASE_MARGIN_Y = 10
 BASE_COL_SPACING = 3
 BASE_ROW_SPACING = 6
-BASE_MAX_LIST_H = 280  # tallest the scrollable list grows before it scrolls
+DEX_MAX_VISIBLE_ROWS = 6  # show at most this many rows; the rest scroll
 
 
 def rarity_color_hex(rarity: str) -> str:
@@ -387,10 +387,14 @@ class DexPanel(QWidget):
         r["sprite"].setFixedHeight(self._sprite_h)
 
     def _fit_list_height(self) -> None:
-        """Size the scroll viewport to the content, capped at BASE_MAX_LIST_H."""
+        """Size the scroll viewport to the content, capped at DEX_MAX_VISIBLE_ROWS
+        rows (the rest scroll)."""
         self._list.adjustSize()
         content = self._list.sizeHint().height()
-        self._scroll.setFixedHeight(min(content, self._px(BASE_MAX_LIST_H)))
+        row_h = self._rows[0]["w"].sizeHint().height() if self._rows else self._sprite_h
+        spacing = self._px(BASE_ROW_SPACING)
+        cap = DEX_MAX_VISIBLE_ROWS * row_h + (DEX_MAX_VISIBLE_ROWS - 1) * spacing
+        self._scroll.setFixedHeight(min(content, cap))
 
     def _fill_row(self, r: dict, entry) -> None:
         self._set_row_sprite(r, entry.id)
