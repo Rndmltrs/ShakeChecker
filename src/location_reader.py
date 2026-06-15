@@ -20,6 +20,9 @@ from ocr_engine import run_ocr
 
 # Drops the " Ch. N" channel suffix (and any trailing noise) from the HUD line.
 _CH_SUFFIX = re.compile(r"\s*ch\.?\s*\d+.*$", re.IGNORECASE)
+# The location crop spans from the very top, so a full-window capture (fixtures
+# and live alike) picks up the "PokeMMO" window-title text before the HUD name.
+_TITLE_PREFIX = re.compile(r"^\s*pokemmo\s*", re.IGNORECASE)
 
 # A location whose name contains any of these is a cave.
 _CAVE_KEYWORDS = (
@@ -43,8 +46,10 @@ _CAVE_WORD_GROUPS = (
 
 
 def clean_location(raw: str) -> str:
-    """The location name without the ' Ch. N' channel suffix or stray edges."""
-    return _CH_SUFFIX.sub("", raw.strip()).strip(" .|")
+    """The location name without the leading 'PokeMMO' title, the ' Ch. N'
+    channel suffix, or stray edges."""
+    s = _TITLE_PREFIX.sub("", raw.strip())
+    return _CH_SUFFIX.sub("", s).strip(" .|")
 
 
 def is_cave_location(name: str) -> bool:

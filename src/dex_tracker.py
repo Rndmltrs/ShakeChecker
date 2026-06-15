@@ -100,6 +100,10 @@ class EncounterData:
     def location_name(self, key: str) -> str:
         return self._locations[key]["name"]
 
+    def location_for_key(self, key: str) -> dict:
+        """The full location record (name, region, encounters) for a key."""
+        return self._locations[key]
+
     def _candidate_keys(self, norm: str, region_u: str | None) -> list[str]:
         """All location keys matching a normalized name (region-filtered): exact
         normalized matches if any, else the best fuzzy match for OCR noise. The
