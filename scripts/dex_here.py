@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from dex_tracker import EncounterData, select_display  # noqa: E402
-from game_time import Period, current_period, current_season  # noqa: E402
+from game_time import Period, current_period, current_season, season_name  # noqa: E402
 
 DATA = ROOT / "src" / "data"
 SHOWN_MAX = 5  # overlay shows this many; the rest collapse into "+X"
@@ -51,7 +51,7 @@ def main() -> None:
 
     entries = data.entries_here(key, period.value, season, caught)
     needed = sum(1 for e in entries if not e.caught)
-    print(f"{data.location_name(key)}  [{period.value}, season {season}] — {needed} needed")
+    print(f"{data.location_name(key)}  [{period.value}, {season_name(season)}] — {needed} needed")
 
     def fmt(e):
         ways = f" ({'/'.join(e.ways)})" if e.ways else ""

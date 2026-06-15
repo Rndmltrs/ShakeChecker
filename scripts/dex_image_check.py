@@ -25,7 +25,7 @@ from account_store import CaughtStore  # noqa: E402
 from battle_reader import load_calibration, read_battle, read_caught_icon  # noqa: E402
 from dex_session import DexSession  # noqa: E402
 from dex_tracker import EncounterData  # noqa: E402
-from game_time import Period  # noqa: E402
+from game_time import Period, season_name  # noqa: E402
 from location_reader import read_location  # noqa: E402
 from name_reader import NameReader  # noqa: E402
 
@@ -86,7 +86,8 @@ def main() -> None:
                     print(enemy_line)
                 print()
                 continue
-            print(f"  {view.route}  ({view.region})  [{view.period.value}, season {view.season}]")
+            when = f"{view.period.value}, {season_name(view.season)}"
+            print(f"  {view.route}  ({view.region})  [{when}]")
             missing = [e for e in view.entries if not e.caught]
             print(f"  {len(missing)} still needed")
             shown = missing if args.all else missing[:SHOWN_MAX]

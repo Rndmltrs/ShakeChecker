@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import datetime as dt
 
-import pytest
-
 from game_time import (
     Period,
     current_period,
@@ -11,6 +9,7 @@ from game_time import (
     game_minute_of_day,
     period_for_game_minute,
     season_for_month,
+    season_name,
 )
 
 
@@ -62,16 +61,22 @@ def test_current_period_from_utc():
 # --- seasons ---
 
 
-def test_every_month_maps_to_a_season_index():
-    for m in range(1, 13):
-        assert season_for_month(m) in (0, 1, 2, 3)
+def test_season_cycles_monthly_every_four_months():
+    # PokeMMO: Jan=Spring, then one season per month, wrapping every 4 months.
+    expected = {
+        1: "Spring", 2: "Summer", 3: "Autumn", 4: "Winter",
+        5: "Spring", 6: "Summer", 7: "Autumn", 8: "Winter",
+        9: "Spring", 10: "Summer", 11: "Autumn", 12: "Winter",
+    }
+    for month, name in expected.items():
+        assert season_name(season_for_month(month)) == name
+
+
+def test_june_is_summer():
+    # confirmed in-game by the user; the anchor for the whole mapping
+    assert season_name(season_for_month(6)) == "Summer"
 
 
 def test_season_changes_monthly_and_uses_current_month():
     assert current_season(utc(0, month=6)) == season_for_month(6)
     assert current_season(utc(0, month=12)) == season_for_month(12)
-
-
-def test_invalid_month_raises():
-    with pytest.raises(KeyError):
-        season_for_month(13)

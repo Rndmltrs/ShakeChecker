@@ -32,19 +32,13 @@ GAME_DAY_MINUTES = 1440
 REAL_CYCLE_MINUTES = 360
 GAME_MINUTES_PER_REAL = GAME_DAY_MINUTES // REAL_CYCLE_MINUTES  # 4
 
-# PokeMMO season for each calendar month (1=Jan..12=Dec), as SEASON0..3 indices
-# used in the encounter data. Seasons rotate monthly. ANCHOR: verify once against
-# the in-game season indicator; adjust this table if the data's SEASONn differs.
-# Convention used here: Spring=0, Summer=1, Autumn=2, Winter=3, with the standard
-# meteorological-style grouping PokeMMO uses (season advances each month, wrapping
-# every 4 months: Jan=Winter? -> see note). Kept as a single table so the mapping
-# is one edit away from correct.
-SEASON_OF_MONTH = {
-    1: 3, 2: 0, 3: 0, 4: 0,   # Jan winter; Feb-Apr spring
-    5: 1, 6: 1, 7: 1,         # May-Jul summer
-    8: 2, 9: 2, 10: 2,        # Aug-Oct autumn
-    11: 3, 12: 3,             # Nov-Dec winter
-}
+# PokeMMO seasons change every real-world MONTH, cycling Spring -> Summer ->
+# Autumn -> Winter and repeating every four months (so each season recurs three
+# times a year). Verified against the PokeMMO wiki and confirmed in-game (June =
+# Summer). The encounter data's SEASON0..3 use the Gen 5 internal order, so:
+#   Spring=0, Summer=1, Autumn=2, Winter=3
+# and the index for a month is simply (month - 1) % 4 (Jan = Spring).
+SEASON_NAMES = ("Spring", "Summer", "Autumn", "Winter")
 
 
 def game_minute_of_day(now_utc: _dt.datetime) -> int:
@@ -64,8 +58,14 @@ def period_for_game_minute(game_minute: int) -> Period:
 
 
 def season_for_month(month: int) -> int:
-    """SEASONn index (0..3) for a calendar month (1..12)."""
-    return SEASON_OF_MONTH[month]
+    """SEASONn index (0..3) for a calendar month (1..12). Jan = Spring (0); one
+    season per month, wrapping every four months."""
+    return (month - 1) % 4
+
+
+def season_name(index: int) -> str:
+    """Human name for a SEASONn index (0..3)."""
+    return SEASON_NAMES[index % 4]
 
 
 def current_period(now_utc: _dt.datetime | None = None) -> Period:

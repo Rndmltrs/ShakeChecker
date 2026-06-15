@@ -27,7 +27,7 @@ def test_none_view_is_empty():
 def test_all_caught_message():
     # everything caught and nothing rare enough to pad -> "all caught here"
     text = dex_panel_text(view([entry(1, "Caterpie", caught=True)]))
-    assert "VIRIDIAN FOREST (KANTO) DAY S0 — 0 needed" in text
+    assert "VIRIDIAN FOREST (KANTO) DAY Spring — 0 needed" in text
     assert "all caught here" in text
 
 

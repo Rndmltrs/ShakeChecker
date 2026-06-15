@@ -41,6 +41,7 @@ from battle_reader import (
 from catch_calc import BattleContext, ball_multiplier, catch_probability
 from dex_session import DexSession, LocationView
 from dex_tracker import EncounterData, select_display
+from game_time import season_name
 from hp_settler import HpSettler
 from location_reader import is_cave_location, read_location
 from name_reader import NameReader
@@ -129,7 +130,7 @@ def dex_panel_text(view: LocationView | None) -> str:
         return ""
     needed = sum(1 for e in view.entries if not e.caught)
     header = (
-        f"[dex] {view.route} ({view.region}) {view.period.value} S{view.season}"
+        f"[dex] {view.route} ({view.region}) {view.period.value} {season_name(view.season)}"
         f" — {needed} needed"
     )
     rows, hidden = select_display(view.entries, DEX_SHOWN_MAX)
