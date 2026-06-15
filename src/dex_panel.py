@@ -3,15 +3,15 @@ while walking the overworld (hidden in battle, where the catch overlay takes
 over). Docks below the game's HUD like the catch overlay.
 
 Layout: a top icon bar (profile + info), a route header (name + region/time/
-season + still-needed count), then up to DEX_ROWS rows of sprite + name + way.
-The name is coloured by the species' rarity (WoW-style). Uncaught come first;
-once they fit, the tail is padded with the rarest already-caught species (✓) --
-the hybrid from dex_tracker.select_display. A "+N" line shows hidden uncaught.
+season + still-needed count), then a VERTICALLY SCROLLABLE list of sprite + name
++ way rows -- every uncaught species (dex order), then the already-caught
+Lure/Rare/Very Rare ones (✓), via dex_tracker.display_order. The list height is
+capped (BASE_MAX_LIST_H); longer lists scroll. Name colour = rarity (WoW-style).
 
 Interaction is HOVER-TO-INTERACT: the window is click-through (input passes to
-the game) until the cursor is over it, then it accepts clicks (icons + per-row
-check-off) -- so it never blocks the game while walking. Click-through is toggled
-via the Win32 WS_EX_TRANSPARENT extended style; a short timer polls the cursor.
+the game) until the cursor is over it, then it accepts clicks (icons, per-row
+check-off) and the wheel scrolls. Click-through is toggled via the Win32
+WS_EX_TRANSPARENT extended style; a short timer polls the cursor.
 
 The app wires four callbacks: on_toggle_caught(dex_id), on_select_profile(name),
 on_create_profile(name), get_profiles()->(active, [names]).
@@ -34,18 +34,18 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMenu,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from dex_session import LocationView
-from dex_tracker import select_display
+from dex_tracker import display_order
 from game_time import season_name
 from overlay import DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, phys_to_logical
 from sprite_loader import SpriteLoader
 
-DEX_ROWS = 5  # rows shown before collapsing the rest into "+N"
 HOVER_POLL_MS = 120  # how often to check if the cursor is over the panel
 
 # WoW-style rarity -> name colour (user's scheme). Very Common/Horde fall back to
@@ -74,6 +74,7 @@ BASE_MARGIN_X = 12
 BASE_MARGIN_Y = 10
 BASE_COL_SPACING = 3
 BASE_ROW_SPACING = 6
+BASE_MAX_LIST_H = 280  # tallest the scrollable list grows before it scrolls
 
 
 def rarity_color_hex(rarity: str) -> str:
@@ -88,6 +89,7 @@ class _ClickRow(QWidget):
         super().__init__()
         self._index = index
         self._on_click = on_click
+        self.setStyleSheet("background: transparent;")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def mousePressEvent(self, _event) -> None:  # noqa: N802 (Qt override)
@@ -104,6 +106,7 @@ class DexPanel(QWidget):
         self._last_pos: tuple[int, int] | None = None
         self._click_through: bool | None = None  # current WS_EX_TRANSPARENT state
         self._legend: QWidget | None = None
+        self._rows: list[dict] = []  # reused row-widget pool, grown as needed
 
         # callbacks the app wires in (no-ops until set)
         self.on_toggle_caught: Callable[[int], None] | None = None
@@ -130,6 +133,13 @@ class DexPanel(QWidget):
             " QLabel { color: #eeeeee; background: transparent; }"
             " QPushButton { color: #cfd2d6; background: transparent; border: none; }"
             " QPushButton:hover { color: #ffffff; }"
+            " QScrollArea { background: transparent; border: none; }"
+            " QScrollBar:vertical { width: 6px; background: transparent; margin: 0; }"
+            " QScrollBar::handle:vertical { background: rgba(255,255,255,70);"
+            " border-radius: 3px; min-height: 20px; }"
+            " QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+            " QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {"
+            " background: transparent; }"
         )
         root.addWidget(panel)
         self._col = QVBoxLayout(panel)
@@ -160,33 +170,20 @@ class DexPanel(QWidget):
         line.setStyleSheet("color: rgba(255,255,255,40);")
         self._col.addWidget(line)
 
-        # pre-built clickable rows: sprite + name (rarity colour) + way/✓ (dim)
-        self._rows: list[dict] = []
-        for i in range(DEX_ROWS):
-            container = _ClickRow(i, self._row_clicked)
-            row = QHBoxLayout(container)
-            row.setContentsMargins(0, 0, 0, 0)
-            sprite = QLabel()
-            sprite.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-            name = QLabel("")
-            name.setTextFormat(Qt.TextFormat.RichText)
-            name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            way = QLabel("")
-            way.setStyleSheet("color: #9aa0aa;")
-            way.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            row.addWidget(sprite)
-            row.addWidget(name, 1)
-            row.addStretch(1)
-            row.addWidget(way)
-            self._col.addWidget(container)
-            self._rows.append(
-                {"box": row, "w": container, "sprite": sprite, "name": name, "way": way,
-                 "dex": None, "movie": None}
-            )
-
-        self._overflow = QLabel("")
-        self._overflow.setStyleSheet("color: #888888;")
-        self._col.addWidget(self._overflow)
+        # scrollable species list
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.viewport().setStyleSheet("background: transparent;")
+        self._list = QWidget()
+        self._list.setStyleSheet("background: transparent;")
+        self._list_layout = QVBoxLayout(self._list)
+        self._list_layout.setContentsMargins(0, 0, 8, 0)  # gap so the scrollbar clears the way text
+        self._list_layout.addStretch(1)  # keep rows top-aligned
+        self._scroll.setWidget(self._list)
+        self._col.addWidget(self._scroll)
 
         self._hover = QTimer(self)
         self._hover.setInterval(HOVER_POLL_MS)
@@ -201,58 +198,49 @@ class DexPanel(QWidget):
         if abs(scale - self._scale) < 0.02:
             return
         self._scale = scale
-
-        def px(base: float) -> int:
-            return max(1, round(base * scale))
-
-        self._panel_w = px(BASE_PANEL_W)
+        self._panel_w = self._px(BASE_PANEL_W)
         self.setFixedWidth(self._panel_w)
-        self._sprite_h = px(BASE_SPRITE_H)
-        self._title.setFont(self._font(px(BASE_TITLE_PX), bold=True))
-        self._subtitle.setFont(self._font(px(BASE_SUB_PX)))
-        self._overflow.setFont(self._font(px(BASE_SUB_PX)))
-        icon_font = self._font(px(BASE_ICON_PX))
+        self._sprite_h = self._px(BASE_SPRITE_H)
+        self._title.setFont(self._font(self._px(BASE_TITLE_PX), bold=True))
+        self._subtitle.setFont(self._font(self._px(BASE_SUB_PX)))
+        icon_font = self._font(self._px(BASE_ICON_PX))
         self._profile_btn.setFont(icon_font)
         self._info_btn.setFont(icon_font)
-        row_font = self._font(px(BASE_ROW_PX))
-        for r in self._rows:
-            r["name"].setFont(row_font)
-            r["way"].setFont(self._font(px(BASE_SUB_PX)))
-            r["sprite"].setFixedHeight(self._sprite_h)
         self._col.setContentsMargins(
-            px(BASE_MARGIN_X), px(BASE_MARGIN_Y), px(BASE_MARGIN_X), px(BASE_MARGIN_Y)
+            self._px(BASE_MARGIN_X), self._px(BASE_MARGIN_Y),
+            self._px(BASE_MARGIN_X), self._px(BASE_MARGIN_Y),
         )
-        self._col.setSpacing(px(BASE_COL_SPACING))
+        self._col.setSpacing(self._px(BASE_COL_SPACING))
+        self._list_layout.setSpacing(self._px(BASE_ROW_SPACING))
         for r in self._rows:
-            r["box"].setSpacing(px(BASE_ROW_SPACING))
+            self._style_row(r)
             self._clear_row_sprite(r)  # force reload at the new sprite size
-        self.adjustSize()
         self._last_pos = None
 
     def show_here(self, view: LocationView) -> None:
         """Populate from a location view and show the panel."""
+        entries = display_order(view.entries)
         needed = sum(1 for e in view.entries if not e.caught)
         self._title.setText(view.route.title())
         self._subtitle.setText(
             f"{view.region.title()} · {view.period.value.title()} · "
             f"{season_name(view.season)} — {needed} needed"
         )
-        rows, hidden = select_display(view.entries, DEX_ROWS)
+        self._ensure_rows(max(1, len(entries)))
         for i, r in enumerate(self._rows):
-            if i < len(rows):
-                self._fill_row(r, rows[i])
+            if i < len(entries):
+                self._fill_row(r, entries[i])
                 r["w"].setVisible(True)
             else:
-                self._clear_row_sprite(r)  # stop off-screen GIFs
+                self._clear_row_sprite(r)
                 r["w"].setVisible(False)
-        if not rows:
+        if not entries:  # nothing left here
             r0 = self._rows[0]
             self._clear_row_sprite(r0)
             r0["w"].setVisible(True)
             r0["name"].setText('<span style="color:#9aa0aa;">all caught here!</span>')
             r0["way"].setText("")
-        self._overflow.setText(f"+{hidden}" if hidden > 0 else "")
-        self._overflow.setVisible(hidden > 0)
+        self._fit_list_height()
         self.adjustSize()
         self.show()
         self._apply_click_through(True)  # start passing input through
@@ -304,7 +292,7 @@ class DexPanel(QWidget):
         win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex)
 
     def _row_clicked(self, index: int) -> None:
-        dex = self._rows[index]["dex"]
+        dex = self._rows[index]["dex"] if index < len(self._rows) else None
         if dex is not None and self.on_toggle_caught is not None:
             self.on_toggle_caught(dex)
 
@@ -364,6 +352,46 @@ class DexPanel(QWidget):
 
     # --- internals ---
 
+    def _ensure_rows(self, n: int) -> None:
+        while len(self._rows) < n:
+            self._make_row()
+
+    def _make_row(self) -> None:
+        index = len(self._rows)
+        container = _ClickRow(index, self._row_clicked)
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        sprite = QLabel()
+        sprite.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        name = QLabel("")
+        name.setTextFormat(Qt.TextFormat.RichText)
+        name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        way = QLabel("")
+        way.setStyleSheet("color: #9aa0aa;")
+        way.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(sprite)
+        row.addWidget(name, 1)
+        row.addStretch(1)
+        row.addWidget(way)
+        # insert above the trailing stretch so rows stay top-aligned
+        self._list_layout.insertWidget(self._list_layout.count() - 1, container)
+        r = {"box": row, "w": container, "sprite": sprite, "name": name, "way": way,
+             "dex": None, "movie": None}
+        self._style_row(r)
+        self._rows.append(r)
+
+    def _style_row(self, r: dict) -> None:
+        r["box"].setSpacing(self._px(BASE_ROW_SPACING))
+        r["name"].setFont(self._font(self._px(BASE_ROW_PX)))
+        r["way"].setFont(self._font(self._px(BASE_SUB_PX)))
+        r["sprite"].setFixedHeight(self._sprite_h)
+
+    def _fit_list_height(self) -> None:
+        """Size the scroll viewport to the content, capped at BASE_MAX_LIST_H."""
+        self._list.adjustSize()
+        content = self._list.sizeHint().height()
+        self._scroll.setFixedHeight(min(content, self._px(BASE_MAX_LIST_H)))
+
     def _fill_row(self, r: dict, entry) -> None:
         self._set_row_sprite(r, entry.id)
         color = rarity_color_hex(entry.rarity)
@@ -397,6 +425,9 @@ class DexPanel(QWidget):
         r["sprite"].clear()
         r["dex"] = None
 
+    def _px(self, base: float) -> int:
+        return max(1, round(base * self._scale))
+
     def _font(self, size_px: int, bold: bool = False) -> QFont:
         f = QFont(self._mono)
         f.setPixelSize(size_px)
@@ -416,11 +447,15 @@ def _demo() -> None:
         DexEntry(1, "Bulbasaur", (), "Lure", False),
         DexEntry(10, "Caterpie", (), "Common", False),
         DexEntry(72, "Tentacool", ("Water",), "Uncommon", False),
-        DexEntry(129, "Magikarp", ("Old Rod",), "Very Common", False),
-        DexEntry(131, "Lapras", ("Water",), "Very Rare", False),
+        DexEntry(73, "Tentacruel", ("Water",), "Rare", False),
+        DexEntry(129, "Magikarp", ("Good Rod", "Old Rod"), "Very Common", False),
+        DexEntry(130, "Gyarados", ("Super Rod",), "Very Rare", False),
+        DexEntry(16, "Pidgey", (), "Common", False),
+        DexEntry(19, "Rattata", (), "Common", False),
+        DexEntry(21, "Spearow", (), "Uncommon", False),
         DexEntry(143, "Snorlax", (), "Rare", True),
     ]
-    view = LocationView("ROUTE 110", "HOENN", Period.DAY, 1, entries)
+    view = LocationView("ROUTE 218", "SINNOH", Period.NIGHT, 1, entries)
 
     app = QApplication(sys.argv)
     panel = DexPanel()

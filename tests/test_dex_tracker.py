@@ -8,6 +8,7 @@ from dex_tracker import (
     DexEntry,
     EncounterData,
     RegionResolver,
+    display_order,
     location_entries,
     select_display,
 )
@@ -144,6 +145,19 @@ def test_select_no_padding_when_uncaught_overflow():
     rows, hidden = select_display(entries, 5)
     assert all(not e.caught for e in rows)  # no room to pad
     assert hidden == 1
+
+
+def test_display_order_lists_all_uncaught_then_caught_rares():
+    entries = [
+        de(2),  # uncaught
+        de(1),  # uncaught (lower id -> first)
+        de(10, "Common", caught=True),  # caught common -> excluded
+        de(11, "Rare", caught=True),
+        de(12, "Very Rare", caught=True),
+    ]
+    order = display_order(entries)
+    assert [e.id for e in order] == [1, 2, 12, 11]  # uncaught by id, then rarest caught
+    assert order[0].caught is False and order[-1].caught is True
 
 
 # --- EncounterData against the real vendored file ---

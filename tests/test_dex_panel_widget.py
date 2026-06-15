@@ -49,15 +49,17 @@ def test_show_here_fills_rows_and_colors(qt_app):
     assert "#b86bff" in p._rows[0]["name"].text()  # Lure -> purple
     assert "Water" in p._rows[1]["way"].text()
     assert "#4aa3ff" in p._rows[1]["name"].text()  # Very Rare -> blue
-    assert p._rows[2]["w"].isVisibleTo(p) is False  # unused rows hidden
 
 
-def test_overflow_shows_plus_count(qt_app):
+def test_lists_all_entries_scrollable(qt_app):
+    # all uncaught get a row (the list scrolls); no "5 + X" cap any more
     entries = [DexEntry(i, f"Mon{i}", (), "Common", False) for i in range(1, 9)]  # 8 uncaught
     p = DexPanel()
     p.show_here(view(entries))
-    assert p._overflow.text() == "+3"
-    assert p._overflow.isVisibleTo(p) is True
+    visible = [r for r in p._rows if r["w"].isVisibleTo(p)]
+    assert len(visible) == 8
+    assert "Mon8" in p._rows[7]["name"].text()
+    assert not hasattr(p, "_overflow")
 
 
 def test_caught_padding_marked_with_check(qt_app):

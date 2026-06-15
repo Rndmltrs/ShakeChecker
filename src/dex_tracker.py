@@ -130,6 +130,17 @@ def location_entries(
     return entries
 
 
+def display_order(entries: list[DexEntry]) -> list[DexEntry]:
+    """The full ordered list for the (scrollable) panel: every uncaught species by
+    dex id, then the already-caught Lure/Rare/Very Rare ones (rarest first)."""
+    uncaught = sorted((e for e in entries if not e.caught), key=lambda e: e.id)
+    rares = sorted(
+        (e for e in entries if e.caught and e.rarity in PAD_RARITIES),
+        key=lambda e: (-_RARITY_RANK[e.rarity], e.id),
+    )
+    return uncaught + rares
+
+
 def select_display(entries: list[DexEntry], limit: int) -> tuple[list[DexEntry], int]:
     """Pick the rows to show and how many uncaught are hidden ("+X").
 
