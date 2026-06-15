@@ -448,6 +448,7 @@ class LiveLoop:
         self._menu_streak = 0  # frames the raw menu_present has held
         self._menu_stable = False  # debounced menu_present fed to the turn counter
         self._last_advance = 0.0  # monotonic time the turn count last went up
+        self._last_chat_turn = 0  # last turn read from chat (for the diagnostic log)
         if self.dex_panel is not None:  # overworld panel out of the way during battle
             self.dex_panel.hide_panel()
         print("battle detected")
@@ -481,12 +482,15 @@ class LiveLoop:
         self.chat.submit(frame)
         chat_turn = self.chat.poll()
         if chat_turn is not None:
+            if chat_turn != self._last_chat_turn:  # diagnostic: shows the chat IS read
+                self._last_chat_turn = chat_turn
+                print(f"chat: Turn {chat_turn}  (counter at Turn {self.turns.turns_completed + 1})")
             completed = chat_turn - 1
             cur = self.turns.turns_completed
             if completed > cur:
-                self.turns.observe(chat_turn, asleep)
+                self.turns.observe(chat_turn, asleep)  # up: a missed turn (e.g. 2-turn move)
             elif completed < cur and now - self._last_advance > TURN_DOWN_GUARD_S:
-                self.turns.set_turn(chat_turn)
+                self.turns.set_turn(chat_turn)  # down: a menu over-count, menu now quiet
 
         # `bt` (menu/action/catch templates, ~10 ms) was read in the loop and is
         # passed in: it drives the chat-independent turn counter (command menu

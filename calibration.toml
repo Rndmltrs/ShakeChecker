@@ -161,7 +161,10 @@ min_dark_frac = 0.90
 # is letterboxed and shifts with window size) the chat sits at a stable window
 # position, so a fractional crop is reliable. It prints "Turn N started!", which
 # the turn counter reads via OCR. Verified legible on full_health_no_status
-# (shows "Turn 2 started!"). Requires the battle chat to be visible.
+# (shows "Turn 2 started!") and live_turn9_gible (Turn 9). Captures ~7 lines, so
+# "Turn N started!" stays in view for several follow-up messages (move/effect/
+# faint), which lets a 2-turn move (Fly/Solarbeam: no menu that turn) still be
+# corrected from the chat. Requires the battle chat to be visible.
 top = 0.90
 bottom = 0.985
 left = 0.0
