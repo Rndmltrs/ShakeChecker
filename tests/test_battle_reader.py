@@ -98,6 +98,33 @@ def test_five_horde_is_multi():
     # found, so the state is MULTI and the overlay stays hidden during the horde.
     reading = read("battle_frame_5x_horde.png")
     assert len(reading.bars) >= 2
+
+
+def test_horde_status_read_at_horde_offset():
+    # In a spread horde the status badge sits RIGHT of the fill (not left as in a
+    # single), so it's read with the horde offset. Both fixtures are all-asleep.
+    for name in ("horde_triple_wild_encounter.png", "5x_horde_sleep.png"):
+        reading = read(name)
+        assert reading.is_horde is True, name
+        assert reading.bars, name
+        assert all(b.status.value == "slp" for b in reading.bars), name
+
+
+def test_horde_remnant_uses_horde_offset_via_hint():
+    # A horde narrowed to ONE bar reads as SINGLE, so layout can't tell it's a
+    # horde; the caller's horde=True hint keeps the right-side badge offset.
+    img = cv2.imread(str(FIXTURES / "horde_triple_wild_encounter.png"))
+    # crop to a single horde bar (the third) so only one is detected
+    one = img.copy()
+    one[:, : int(img.shape[1] * 0.52)] = 0  # blank out the left two bars
+    assert read_battle(one, CAL, horde=True).bars[0].status.value == "slp"
+
+
+def test_double_status_not_broken_by_horde_logic():
+    # a 2x double stacks bars at the left -> single offset; status still read
+    reading = read("double_battle_red_health_burn.png")
+    assert reading.is_horde is False
+    assert reading.bars[0].status.value == "brn"
     assert reading.state == BattleState.MULTI
 
 

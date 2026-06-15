@@ -57,6 +57,7 @@ class BarReading:
 class BattleReading:
     state: BattleState
     bars: tuple[BarReading, ...]
+    is_horde: bool = False  # spread (3x/5x) layout -- bars across the top, not stacked
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,8 @@ class StatusCalibration(BaseModel):
     dx1: int
     dy0: int
     dy1: int
+    horde_dx0: int  # status badge x-range for spread HORDE bars (right of the fill)
+    horde_dx1: int
     dark_val_max: int
     present_dark_frac: float
     fill_sat_min: int
@@ -381,8 +384,27 @@ def read_status(hsv_full: np.ndarray, x: int, y: int, cal: StatusCalibration) ->
     return classify_status_box(hsv_full[y0:y1, x0:x1], cal)
 
 
-def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]:
-    """Find and measure all enemy HP bars in the frame, top to bottom."""
+# A horde (3x/5x) spreads its bars horizontally; a single/double keeps them at the
+# left (a double stacks them vertically at the SAME x). If the bars' x-range
+# exceeds this, it's a spread horde -> the status badge is read at the horde offset.
+HORDE_SPREAD_PX = 80
+
+
+def _bars_spread(bars: list[BarReading]) -> bool:
+    """True if 2+ bars are spread horizontally (a horde), vs stacked (a double)."""
+    if len(bars) < 2:
+        return False
+    return bool(max(b.x for b in bars) - min(b.x for b in bars) > HORDE_SPREAD_PX)
+
+
+def read_enemy_bars(
+    frame_bgr: np.ndarray, cal: Calibration, horde: bool = False
+) -> list[BarReading]:
+    """Find and measure all enemy HP bars in the frame, top to bottom.
+
+    `horde` forces the spread-horde status-badge offset (used for a horde narrowed
+    to one bar, which can't be told apart by layout); otherwise it's auto-detected
+    from the bars' horizontal spread."""
     c = cal.hp_bar
     h, w = frame_bgr.shape[:2]
     y0, y1 = int(h * c.search_top), int(h * c.search_bottom)
@@ -423,8 +445,8 @@ def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]
         # not 97%. Single bars measure 218 and are unchanged.
         inner = _inner_width(hsv_full, y0 + by, y0 + by + bh - 1, rx0, c)
         hp_pct = min(100.0, 100.0 * fill_w / inner)
-        status = read_status(hsv_full, rx0, fy, cal.status)
-        bars.append(BarReading(hp_pct=round(hp_pct, 1), color=color, status=status, x=rx0, y=fy))
+        # status read AFTER the layout is known (its badge offset differs in hordes)
+        bars.append(BarReading(round(hp_pct, 1), color, Status.NONE, rx0, fy))
 
     # Merge duplicate detections of the SAME bar (multiple blobs per fill), which
     # land at the same x AND y. Horde bars sit at the same y but different x, so
@@ -442,7 +464,15 @@ def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]
                 merged[-1] = bar
             continue
         merged.append(bar)
-    return merged
+
+    # Spread bars (or the caller's horde hint) -> the status badge is on the right
+    # of the fill, not the left. Read each bar's status with the matching offset.
+    s = cal.status
+    if horde or _bars_spread(merged):
+        s = s.model_copy(update={"dx0": s.horde_dx0, "dx1": s.horde_dx1})
+    return [
+        BarReading(b.hp_pct, b.color, read_status(hsv_full, b.x, b.y, s), b.x, b.y) for b in merged
+    ]
 
 
 def is_battle_ui_present(frame_bgr: np.ndarray, cal: BattleUiCalibration) -> bool:
@@ -546,12 +576,12 @@ class BattleTextReader:
         return float(cv2.matchTemplate(gray, tpl, cv2.TM_CCOEFF_NORMED).max())
 
 
-def read_battle(frame_bgr: np.ndarray, cal: Calibration) -> BattleReading:
-    bars = read_enemy_bars(frame_bgr, cal)
+def read_battle(frame_bgr: np.ndarray, cal: Calibration, horde: bool = False) -> BattleReading:
+    bars = read_enemy_bars(frame_bgr, cal, horde=horde)
     if not bars:
         state = BattleState.NO_BATTLE
     elif len(bars) == 1:
         state = BattleState.SINGLE
     else:
         state = BattleState.MULTI
-    return BattleReading(state=state, bars=tuple(bars))
+    return BattleReading(state=state, bars=tuple(bars), is_horde=bool(horde or _bars_spread(bars)))

@@ -81,6 +81,12 @@ dx0 = -24
 dx1 = -3
 dy0 = -28
 dy1 = -7
+# In a spread HORDE (3x/5x, or a horde narrowed to a few), the bar is laid out
+# differently: the status badge sits to the RIGHT of the fill start, not the left.
+# Measured on horde_triple_wild_encounter (SLP) and 5x_horde_sleep. Same dy.
+# read_enemy_bars uses these for spread-horde bars and dx0/dx1 otherwise.
+horde_dx0 = 14
+horde_dx1 = 40
 # Every badge has a dark border + icon; the empty no-status slot is plain
 # background (sky/cave) with no dark pixels. dark_frac is the presence signal:
 # 0.00 for all no-status fixtures, >=0.13 for all badge fixtures.

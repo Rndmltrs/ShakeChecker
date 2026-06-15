@@ -380,7 +380,11 @@ class LiveLoop:
 
         frame = self.capture.grab(win_rect)
         now = time.monotonic()
-        reading = read_battle(frame, self.cal)
+        # Pass the horde hint so a horde narrowed to ONE bar still reads its status
+        # at the horde (right-side) badge offset; full hordes auto-detect by spread.
+        reading = read_battle(frame, self.cal, horde=self._was_horde)
+        if reading.is_horde:
+            self._was_horde = True
         has_bar = reading.state in (BattleState.SINGLE, BattleState.MULTI)
         # Membership uses battle-SPECIFIC signals only: the enemy HP bar plus the
         # menu/action/catch templates. (The old dark-panel signal false-positives
@@ -469,6 +473,7 @@ class LiveLoop:
         self._menu_raw = False  # last raw menu_present
         self._menu_streak = 0  # frames the raw menu_present has held
         self._menu_stable = False  # debounced menu_present fed to the turn counter
+        self._was_horde = False  # battle has been a spread horde (status badge on the right)
         self._last_advance = 0.0  # monotonic time the turn count last went up
         self._last_chat_turn = 0  # last turn read from chat (for the diagnostic log)
         if self.dex_panel is not None:  # overworld panel out of the way during battle
