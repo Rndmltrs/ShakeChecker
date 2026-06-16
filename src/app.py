@@ -101,12 +101,13 @@ TURN_DOWN_GUARD_S = 3.0
 DEX_LOC_INTERVAL_S = 2.5
 DEX_SHOWN_MAX = 5  # entries shown before collapsing the rest into "+X"
 # A real single-enemy or trainer HP bar sits in the canonical top-left slot at this
-# fraction of the frame width -- measured EXACTLY 0.170-0.173 across every single/
-# trainer/double fixture from 1912 to 2356 px wide (resolution-independent). Horde
-# bars spread across the centre (0.318-0.580). A lone bar found right of this cutoff
-# is a horde mon that outlasted its pack -> wild, never a trainer. 0.30 separates the
-# two with margin and tolerates the slot drifting right under wide-aspect letterbox.
-HORDE_REMNANT_X_FRAC = 0.30
+# fraction of the frame width -- measured 0.171-0.188 across every single/trainer/
+# double fixture from 1182 to 3437 px wide (resolution-independent). Horde bars
+# spread across the centre (0.318-0.691). A lone bar found right of this cutoff is a
+# horde mon that outlasted its pack -> wild, never a trainer. 0.25 is the midpoint of
+# the gap, keeping ~0.06 margin on both sides at any window size. Mirrors
+# battle_reader.REMNANT_X_FRAC (status-offset selection).
+HORDE_REMNANT_X_FRAC = 0.25
 
 
 class AppState(enum.Enum):

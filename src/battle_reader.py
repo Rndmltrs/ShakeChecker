@@ -403,14 +403,17 @@ def read_status(hsv_full: np.ndarray, x: int, y: int, cal: StatusCalibration) ->
 # exceeds this, it's a spread horde -> the status badge is read at the horde offset.
 HORDE_SPREAD_PX = 80
 
-# A single enemy / trainer / wild-double bar sits in the canonical top-left slot
-# (x <= ~0.19 of the frame width across every such fixture, all resolutions); a
-# horde spreads its bars across the centre (>= 0.32). So a LONE bar found right of
-# this fraction is a horde mon that outlasted its pack -- its status badge is on
-# the RIGHT of the fill (horde layout), even though only one bar is left and the
-# horizontal-spread test can no longer see it. Resolution-independent (a fraction,
-# not pixels). Mirrors HORDE_REMNANT_X_FRAC in app.py (trainer-skip).
-REMNANT_X_FRAC = 0.30
+# A single enemy / trainer / wild-double bar sits in the canonical top-left slot; a
+# horde spreads its bars across the centre. A lone (or stacked) bar found right of
+# this fraction is therefore a horde mon that outlasted its pack -- its status badge
+# is on the RIGHT of the fill (horde layout), even though the horizontal-spread test
+# can no longer see it. Measured x-fractions across every fixture (ratio 1.31-2.39,
+# width 1182-3437 px): singles 0.171-0.188, horde bars 0.318-0.691. The threshold
+# sits at the midpoint of that gap so BOTH sides keep ~0.06 of margin at any window
+# size -- resolution-independent (a fraction, not pixels). This is only the backup;
+# the primary signal is the 560 px+ spread of a fresh horde, which latches reliably
+# at every resolution. Mirrors HORDE_REMNANT_X_FRAC in app.py (trainer-skip).
+REMNANT_X_FRAC = 0.25
 
 
 def _bars_spread(bars: list[BarReading]) -> bool:
