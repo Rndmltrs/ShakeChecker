@@ -32,7 +32,7 @@ class BattleContext:
     enemy_types: tuple[str, ...] = ()
     enemy_level: int = 1
     dusk_active: bool = False  # night or cave (Dusk Ball condition)
-    already_caught: bool = False  # Repeat Ball condition (unconfirmed rule)
+    repeat_chain: int = 0  # consecutive catches of THIS species in an unbroken series (Repeat Ball)
 
 
 def _quick(ctx: BattleContext) -> float:
@@ -67,6 +67,17 @@ def _dream(ctx: BattleContext) -> float:
     return _DREAM_BY_SLEEP[min(max(ctx.turns_asleep, 0), 3)]
 
 
+# Repeat Ball (PokeMMO): +0.1x for each consecutive catch of the SAME species in
+# an unbroken series, starting at 1.0x and capping at 2.5x once 15 are chained
+# (1.0 + 0.1*15). The chain breaks when the series is interrupted (see app.py).
+_REPEAT_STEP = 0.1
+_REPEAT_MAX = 2.5
+
+
+def _repeat(ctx: BattleContext) -> float:
+    return min(1.0 + _REPEAT_STEP * max(ctx.repeat_chain, 0), _REPEAT_MAX)
+
+
 # Conditional ball rules, keyed by the "rule" field in balls.json.
 BALL_RULES: dict[str, Callable[[BattleContext], float]] = {
     "quick": _quick,
@@ -75,6 +86,7 @@ BALL_RULES: dict[str, Callable[[BattleContext], float]] = {
     "nest": _nest,
     "dusk": _dusk,
     "dream": _dream,
+    "repeat": _repeat,
 }
 
 

@@ -40,6 +40,7 @@ from battle_reader import (
     read_caught_icon,
 )
 from catch_calc import BattleContext, ball_multiplier, catch_probability
+from catch_chain import CatchChain
 from dex_panel import DexPanel
 from dex_session import DexSession, LocationView
 from dex_tracker import EncounterData, select_display
@@ -136,12 +137,14 @@ def battle_context(
     turns_asleep: int = 0,
     enemy_asleep: bool = False,
     dusk_active: bool = False,
+    repeat_chain: int = 0,
 ) -> BattleContext:
     """Build the conditional-ball context from a resolved enemy dict.
 
     turns_completed/turns_asleep default to 0 until the turn counter lands, so
     Quick Ball reads x5, Timer Ball x1 and Dream Ball x1 — all correct for the
-    first turn with no accumulated sleep."""
+    first turn with no accumulated sleep. repeat_chain is the current same-species
+    catch streak (0 unless this enemy matches the active Repeat Ball chain)."""
     return BattleContext(
         turns_completed=turns_completed,
         turns_asleep=turns_asleep,
@@ -149,6 +152,7 @@ def battle_context(
         enemy_types=tuple(enemy.get("types") or ()),
         enemy_level=enemy.get("level") or 1,
         dusk_active=dusk_active,
+        repeat_chain=repeat_chain,
     )
 
 
@@ -329,6 +333,9 @@ class LiveLoop:
         self.status = StatusSettler()
         self._caught_printed = False  # printed "caught X!" this battle
         self._catch_streak = 0  # consecutive frames the catch banner was seen
+        # Repeat Ball catch chain: consecutive catches of the SAME species without
+        # interruption. Spans battles (NOT reset in _enter_battle); see _on_catch.
+        self._chain = CatchChain()
         self.dusk_active = False  # cave/night -> Dusk Ball boost
         self._loc_read = False  # location OCR'd this battle yet
         self._is_trainer = False  # trainer battle -> overlay hidden
@@ -595,6 +602,7 @@ class LiveLoop:
         if self._catch_streak >= 2 and not self._caught_printed and self.cached is not None:
             print(f"caught {self.cached['name']}!")
             self._caught_printed = True
+            self._on_catch(self.cached)
             # A fresh catch has no OT ball yet (that only shows on already-owned
             # species), so record it here so it drops off the dex list at once.
             if self.dex is not None and self.cached.get("id"):
@@ -614,6 +622,22 @@ class LiveLoop:
             self.last_line = "multi"
             self.overlay.hide_battle()
         # NO_BATTLE while in battle = intro/animation: keep the overlay as is
+
+    def _on_catch(self, enemy: dict) -> None:
+        """Advance the Repeat Ball catch chain after a successful catch: +1 if it
+        matches the active chain species, else restart the chain at this species."""
+        sid = enemy.get("id")
+        if sid is None:
+            return
+        length = self._chain.record_catch(sid)
+        if self.debug:
+            print(f"[dbg] repeat chain: {enemy.get('name')} x{length}")
+
+    def _chain_for(self, enemy: dict | None) -> int:
+        """The current catch chain length that applies to THIS enemy: the running
+        chain if it's the same species, else 0 (Repeat Ball shows 1x for a fresh
+        species)."""
+        return self._chain.length_for(enemy.get("id") if enemy else None)
 
     def _update_single(self, frame, bar, rect) -> None:
         hp_pct = self.hp.update(bar.hp_pct)  # wait for the bar to settle
@@ -661,6 +685,7 @@ class LiveLoop:
                 turns_asleep=self.turns.turns_asleep,
                 enemy_asleep=status == "slp",
                 dusk_active=self.dusk_active,
+                repeat_chain=self._chain_for(self.cached),
             )
             probs = ball_probs(
                 hp_pct, self.cached["catch_rate"], self.status_rates[status], self.balls, ctx

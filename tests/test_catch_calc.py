@@ -116,8 +116,17 @@ def test_luxury_is_one_not_two():
     assert mult("luxury", BattleContext()) == 1.0
 
 
-def test_repeat_placeholder_is_one():
-    assert mult("repeat", BattleContext(already_caught=True)) == 1.0
+def test_repeat_ball_scales_with_catch_chain():
+    # PokeMMO Repeat Ball: +0.1x per consecutive catch of the same species, from
+    # 1.0x (no chain) up to 2.5x once 15 are chained, then capped.
+    def repeat(chain):
+        return mult("repeat", BattleContext(repeat_chain=chain))
+
+    assert repeat(0) == pytest.approx(1.0)
+    assert repeat(1) == pytest.approx(1.1)
+    assert repeat(5) == pytest.approx(1.5)
+    assert repeat(15) == pytest.approx(2.5)
+    assert repeat(99) == pytest.approx(2.5)  # capped at the 15-chain value
 
 
 def test_quick_ball_first_turn_only():
