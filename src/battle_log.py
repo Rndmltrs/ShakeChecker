@@ -20,30 +20,37 @@ import cv2
 import numpy as np
 
 from battle_reader import ChatCalibration
-from ocr_engine import run_ocr
+from ocr_engine import run_ocr_lines, sorted_ocr_lines
 
 # "Turn 2 started!" — tolerate OCR spacing/case noise.
 _TURN = re.compile(r"turn\s*(\d{1,3})\s*start", re.IGNORECASE)
 
 
 def parse_turn_number(texts: list[str]) -> int | None:
-    """Highest "Turn N started" number among OCR text lines, or None."""
-    best: int | None = None
+    """Turn number from the BOTTOMMOST "Turn N started" line, or None.
+
+    `texts` must be ordered top-to-bottom (the chat is chronological: oldest line
+    at the top, newest at the bottom). Taking the last match -- not the highest
+    number -- means that at the very start of a new battle, the previous battle's
+    higher "Turn N" still lingering above is ignored in favour of the new battle's
+    "Turn 1" at the bottom. (Within one battle, turns only climb, so the bottommost
+    is also the highest -- same result.)"""
+    found: int | None = None
     for line in texts:
         for m in _TURN.finditer(line):
-            n = int(m.group(1))
-            best = n if best is None else max(best, n)
-    return best
+            found = int(m.group(1))  # a later (lower) line overrides -> bottommost wins
+    return found
 
 
 def read_turn_number(frame_bgr: np.ndarray, cal: ChatCalibration) -> int | None:
     """Current turn number (1-based) from the chat, or None if not readable."""
     h, w = frame_bgr.shape[:2]
-    crop = frame_bgr[int(h * cal.top) : int(h * cal.bottom), int(w * cal.left) : int(w * cal.right)]
+    x0, x1 = cal.crop_x(w)
+    crop = frame_bgr[int(h * cal.top) : int(h * cal.bottom), x0:x1]
     if crop.size == 0:
         return None
     up = cv2.resize(crop, None, fx=cal.upscale, fy=cal.upscale, interpolation=cv2.INTER_CUBIC)
-    return parse_turn_number(run_ocr(up))
+    return parse_turn_number(run_ocr_lines(up))
 
 
 class AsyncChatReader:
@@ -62,12 +69,17 @@ class AsyncChatReader:
         return self._future is not None and not self._future.done()
 
     def submit(self, frame_bgr: np.ndarray) -> None:
-        if self.busy():
+        # Don't start a new read while one exists -- whether still running OR
+        # finished-but-not-yet-polled. Overwriting a finished future here (it is
+        # no longer "busy") would silently discard its result before poll() reads
+        # it, so the turn would never come through. poll() clears _future.
+        if self._future is not None:
             return
         c = self._cal
         h, w = frame_bgr.shape[:2]
+        x0, x1 = c.crop_x(w)
         crop = frame_bgr[
-            int(h * c.top) : int(h * c.bottom), int(w * c.left) : int(w * c.right)
+            int(h * c.top) : int(h * c.bottom), x0:x1
         ].copy()  # copy: the worker reads it after this frame is gone
         self._future = self._pool.submit(self._read, crop)
 
@@ -98,4 +110,4 @@ class AsyncChatReader:
             crop, None, fx=self._cal.upscale, fy=self._cal.upscale, interpolation=cv2.INTER_CUBIC
         )
         result, _ = self._ocr(up)
-        return parse_turn_number([text for _box, text, _score in result] if result else [])
+        return parse_turn_number(sorted_ocr_lines(result))

@@ -26,19 +26,27 @@ from pathlib import Path
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
+from account_store import AccountConfig, CaughtStore, delete_account_data
 from battle_log import AsyncChatReader, read_turn_number
 from battle_reader import (
     BattleState,
     BattleTextReader,
     Calibration,
     Status,
+    is_battle_ui_present,
     is_trainer_battle,
     load_calibration,
     read_battle,
+    read_caught_icon,
 )
 from catch_calc import BattleContext, ball_multiplier, catch_probability
+from catch_chain import CatchChain
+from dex_panel import DexPanel
+from dex_session import DexSession, LocationView
+from dex_tracker import EncounterData, select_display
+from game_time import current_game_minute, is_dusk_ball_night, season_name
 from hp_settler import HpSettler
-from location_reader import is_cave_location, read_location
+from location_reader import is_cave_location, read_game_clock, read_location
 from name_reader import NameReader
 from overlay import Overlay, scale_for_window
 from status_settler import StatusSettler
@@ -60,14 +68,46 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "src" / "data"
 SPECIES_PATH = DATA / "species_core.json"
 TEMPLATES_DIR = DATA / "templates"
+ENCOUNTERS_PATH = DATA / "encounters.json"
+LEGENDARIES_PATH = DATA / "legendaries.json"
+USERDATA = ROOT / "userdata"  # per-account caught lists + active-account config
 
 WAITING_POLL_S = 2.0
 IDLE_FRAME_S = 0.5  # ~2 fps
 BATTLE_FRAME_S = 0.2  # ~5 fps
-# End the battle once the battle-specific signals (enemy bar + menu/action/catch
-# templates) have all been gone this long — covers brief animation gaps without
-# lingering too long after a faint/flee.
-BATTLE_END_GRACE_S = 2.0
+# How long the battle-specific signals (enemy bar + menu/action/catch templates)
+# must ALL be gone before the battle ends. Short when the battle UI panel is
+# already gone (back to the overworld -> clear the catch overlay promptly), but
+# long while the dark command panel is still up: a 2-turn move (Fly/Dig/Solarbeam)
+# hides the enemy bar with no menu for a couple seconds mid-battle, and that panel
+# stays, so we must NOT end the battle then.
+BATTLE_END_GRACE_S = 1.0
+BATTLE_ANIM_GRACE_S = 4.0
+# Trainer battles cycle through several Pokemon with multi-second gaps (faint +
+# "sent out") that have no battle signal; a longer grace keeps those gaps from
+# ending the battle (which would flash the overlays and re-run trainer detection).
+TRAINER_END_GRACE_S = 6.0
+# The command menu must hold present/absent this many battle frames before the
+# turn counter accepts the change — filters brief template-match flicker during
+# multi-target (horde) animations that would otherwise over-count turns.
+MENU_STABLE_FRAMES = 2
+# The chat ("Turn N started!") is ground truth and corrects the menu count in BOTH
+# directions. A LOWER chat reading is only trusted (to fix an over-count) once the
+# menu hasn't advanced for this long, so a stale async read right after a real
+# turn advance can't briefly drag the count down.
+TURN_DOWN_GUARD_S = 3.0
+# Location OCR for the dex panel is comparatively expensive and the location
+# changes slowly, so refresh it at most this often while walking around (IDLE).
+DEX_LOC_INTERVAL_S = 2.5
+DEX_SHOWN_MAX = 5  # entries shown before collapsing the rest into "+X"
+# A real single-enemy or trainer HP bar sits in the canonical top-left slot at this
+# fraction of the frame width -- measured 0.171-0.188 across every single/trainer/
+# double fixture from 1182 to 3437 px wide (resolution-independent). Horde bars
+# spread across the centre (0.318-0.691). A lone bar found right of this cutoff is a
+# horde mon that outlasted its pack -> wild, never a trainer. 0.25 is the midpoint of
+# the gap, keeping ~0.06 margin on both sides at any window size. Mirrors
+# battle_reader.REMNANT_X_FRAC (status-offset selection).
+HORDE_REMNANT_X_FRAC = 0.25
 
 
 class AppState(enum.Enum):
@@ -93,20 +133,59 @@ def lookup_species(name: str) -> dict:
 
 
 def battle_context(
-    enemy: dict, turns_completed: int = 0, turns_asleep: int = 0, dusk_active: bool = False
+    enemy: dict,
+    turns_completed: int = 0,
+    turns_asleep: int = 0,
+    enemy_asleep: bool = False,
+    dusk_active: bool = False,
+    repeat_chain: int = 0,
 ) -> BattleContext:
     """Build the conditional-ball context from a resolved enemy dict.
 
     turns_completed/turns_asleep default to 0 until the turn counter lands, so
     Quick Ball reads x5, Timer Ball x1 and Dream Ball x1 — all correct for the
-    first turn with no accumulated sleep."""
+    first turn with no accumulated sleep. repeat_chain is the current same-species
+    catch streak (0 unless this enemy matches the active Repeat Ball chain)."""
     return BattleContext(
         turns_completed=turns_completed,
         turns_asleep=turns_asleep,
+        enemy_asleep=enemy_asleep,
         enemy_types=tuple(enemy.get("types") or ()),
         enemy_level=enemy.get("level") or 1,
         dusk_active=dusk_active,
+        repeat_chain=repeat_chain,
     )
+
+
+def dex_panel_text(view: LocationView | None) -> str:
+    """The console form of the dex panel: a header with the still-needed count,
+    then up to DEX_SHOWN_MAX rows. Uncaught species come first by dex id ('+X' for
+    the rest); once those fit, the tail is padded with the rarest already-caught
+    species (marked ✓) so the notable rares stay visible. '' if no location."""
+    if view is None:
+        return ""
+    needed = sum(1 for e in view.entries if not e.caught)
+    header = (
+        f"[dex] {view.route} ({view.region}) {view.period.value} {season_name(view.season)}"
+        f" — {needed} needed"
+    )
+    rows, hidden = select_display(view.entries, DEX_SHOWN_MAX)
+    if not rows:
+        return header + "\n  (all caught here!)"
+    lines = [header]
+    for e in rows:
+        check = " ✓" if e.caught else ""
+        lines.append(f"  #{e.id:<4} {e.name} [{e.rarity}]{_ways_note(e.ways)}{check}")
+    if hidden > 0:
+        lines.append(f"  +{hidden}")
+    return "\n".join(lines)
+
+
+def _ways_note(ways: tuple[str, ...]) -> str:
+    """Parenthesised non-default encounter ways for an entry, e.g. ' (Water)',
+    ' (Good Rod/Old Rod)', ' (Lure)', ' (Grass Pheno)'. Empty for plain
+    grass/cave walking (dex_tracker.encounter_tag already dropped those)."""
+    return f" ({'/'.join(ways)})" if ways else ""
 
 
 def format_line(name: str, hp_pct: float, status: str, probs: list[tuple[str, float]]) -> str:
@@ -227,11 +306,17 @@ class LiveLoop:
         status_override: str | None,
         cal: Calibration,
         overlay: Overlay,
+        dex: DexSession | None = None,
+        dex_panel: DexPanel | None = None,
+        debug: bool = False,
     ) -> None:
+        self.debug = debug
         self.species_override = species_override
         self.status_override = status_override
         self.cal = cal
         self.overlay = overlay
+        self.dex = dex  # None if the dex data couldn't be loaded
+        self.dex_panel = dex_panel  # overworld "missing here" overlay
         self.balls = load_balls()
         self.status_rates = load_status_rates()
         self.name_reader = None if species_override else NameReader(cal.name, SPECIES_PATH)
@@ -249,10 +334,24 @@ class LiveLoop:
         self.status = StatusSettler()
         self._caught_printed = False  # printed "caught X!" this battle
         self._catch_streak = 0  # consecutive frames the catch banner was seen
+        # Repeat Ball catch chain: consecutive catches of the SAME species without
+        # interruption. Spans battles (NOT reset in _enter_battle); see _on_catch.
+        self._chain = CatchChain()
         self.dusk_active = False  # cave/night -> Dusk Ball boost
         self._loc_read = False  # location OCR'd this battle yet
         self._is_trainer = False  # trainer battle -> overlay hidden
         self._trainer_decided = False  # trainer vs wild settled this battle
+        self._ot_checked = False  # enemy's OT-caught icon checked this battle
+        self._was_horde = False  # read_battle horde hint (read every tick, so init here)
+        self._last_loc_check = 0.0  # last IDLE location OCR (throttle)
+        self._dex_log = ""  # last printed dex panel text (console dedup)
+        self._last_hud = ""  # last HUD location seen (to refresh the panel on a toggle)
+        if self.dex_panel is not None and self.dex is not None:
+            self.dex_panel.on_toggle_caught = self._dex_toggle_caught
+            self.dex_panel.on_select_profile = self._dex_use_profile
+            self.dex_panel.on_create_profile = self._dex_use_profile
+            self.dex_panel.on_delete_profile = self._dex_delete_profile
+            self.dex_panel.get_profiles = self._dex_profiles
 
     def start(self) -> None:
         species_src = (
@@ -291,11 +390,17 @@ class LiveLoop:
                 self.state = AppState.WAITING
                 self.hwnd = None
                 self.overlay.hide_battle()
+                if self.dex_panel is not None:
+                    self.dex_panel.hide_panel()
             return WAITING_POLL_S
 
         frame = self.capture.grab(win_rect)
         now = time.monotonic()
-        reading = read_battle(frame, self.cal)
+        # Pass the horde hint so a horde narrowed to ONE bar still reads its status
+        # at the horde (right-side) badge offset; full hordes auto-detect by spread.
+        reading = read_battle(frame, self.cal, horde=self._was_horde)
+        if reading.is_horde:
+            self._was_horde = True
         has_bar = reading.state in (BattleState.SINGLE, BattleState.MULTI)
         # Membership uses battle-SPECIFIC signals only: the enemy HP bar plus the
         # menu/action/catch templates. (The old dark-panel signal false-positives
@@ -305,12 +410,28 @@ class LiveLoop:
         bt = self.battle_text.read(frame)
         in_battle = has_bar or bt.menu_present or bt.action or bt.caught
 
+        # Pick the battle-end grace:
+        #  - trainer battle: long (Pokemon swaps between faints leave a gap);
+        #  - else if the dark command panel is still up: long -- we're mid-battle in
+        #    an animation (2-turn move hides the bar with no menu), DON'T end;
+        #  - else (panel gone -> truly back in the overworld): short, so the catch
+        #    overlay clears quickly.
+        # The panel only sets the grace; it never extends in_battle/last_seen, so a
+        # dark cave (where the panel reads present in the overworld too) still ends
+        # the battle after the long grace rather than never.
+        ui_present = is_battle_ui_present(frame, self.cal.battle_ui)
+        if self._is_trainer:
+            grace = TRAINER_END_GRACE_S
+        elif ui_present:
+            grace = BATTLE_ANIM_GRACE_S
+        else:
+            grace = BATTLE_END_GRACE_S
         if in_battle:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
                 self._enter_battle()
-            self._battle_step(frame, reading, bt, client_rect)
-        elif self.state is AppState.BATTLE and now - self.last_seen_battle > BATTLE_END_GRACE_S:
+            self._battle_step(frame, reading, bt, client_rect, now)
+        elif self.state is AppState.BATTLE and now - self.last_seen_battle > grace:
             self.state = AppState.IDLE
             self.last_line = ""
             self.cached = None
@@ -318,6 +439,35 @@ class LiveLoop:
                 print("battle ended")
             self._caught_printed = False
             self.overlay.hide_battle()
+            # Show the dex panel at once, from the pre-battle location (you can't
+            # move during a battle, so it's still valid) -- no wait for the next
+            # throttled OCR tick. _last_loc_check is reset so OCR re-confirms soon.
+            self._last_loc_check = 0.0
+            if self.dex_panel is not None and self.dex is not None and self._last_hud:
+                view = self.dex.on_location(self._last_hud)
+                if view is not None:
+                    self.dex_panel.apply_scale(scale_for_window(client_rect.height))
+                    self.dex_panel.show_here(view)
+                    self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+
+        # Walking around (not in battle): refresh the "missing here" dex panel from
+        # the HUD location on a throttle (location OCR is slow, location changes
+        # slowly). Skipped during battles, where the location is read once instead.
+        # Drive the overworld dex panel only in the IDLE state -- NOT merely when
+        # "not in_battle" this frame: during a battle animation the bar/menu can
+        # briefly vanish while the state is still BATTLE, which would flash the
+        # dex panel over the catch overlay.
+        dex_due = now - self._last_loc_check >= DEX_LOC_INTERVAL_S
+        if self.state is AppState.IDLE and self.dex is not None and dex_due:
+            self._last_loc_check = now
+            view = self._update_dex(read_location(frame, self.cal.location))
+            if self.dex_panel is not None:
+                if view is not None:
+                    self.dex_panel.apply_scale(scale_for_window(client_rect.height))
+                    self.dex_panel.show_here(view)
+                    self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+                else:  # location not matched -> nothing useful to show
+                    self.dex_panel.hide_panel()
 
         return self._frame_interval()
 
@@ -335,45 +485,122 @@ class LiveLoop:
         self._loc_read = False
         self._is_trainer = False
         self._trainer_decided = False
+        self._ot_checked = False
+        self._menu_raw = False  # last raw menu_present
+        self._menu_streak = 0  # frames the raw menu_present has held
+        self._menu_stable = False  # debounced menu_present fed to the turn counter
+        self._was_horde = False  # battle has been a spread horde (status badge on the right)
+        self._last_advance = 0.0  # monotonic time the turn count last went up
+        self._last_chat_turn = 0  # last turn read from chat (for the diagnostic log)
+        if self.dex_panel is not None:  # overworld panel out of the way during battle
+            self.dex_panel.hide_panel()
         print("battle detected")
 
-    def _battle_step(self, frame, reading, bt, rect) -> None:
+    def _battle_step(self, frame, reading, bt, rect, now) -> None:
         # Read the location once per battle (it never changes mid-battle) to set
         # the Dusk Ball cave boost. Retry until a non-empty name is read (the first
         # battle frame can be mid-transition).
         if not self._loc_read:
             loc = read_location(frame, self.cal.location)
             if loc:
-                self.dusk_active = is_cave_location(loc)
+                cave = is_cave_location(loc)
+                night = self._is_night(frame)  # Dusk Ball also boosts at night
+                self.dusk_active = cave or night
                 self._loc_read = True
-                note = " (cave -> Dusk Ball boosted)" if self.dusk_active else ""
+                bits = [b for b, on in (("cave", cave), ("night", night)) if on]
+                note = f" ({'+'.join(bits)} -> Dusk Ball boosted)" if bits else ""
                 print(f"location: {loc}{note}")
+                if self.dex is not None:  # same read drives the dex panel
+                    self._update_dex(loc)
 
         asleep = reading.state is BattleState.SINGLE and reading.bars[0].status is Status.SLP
 
-        # Chat turn is a CORRECTION only: the slow OCR runs on a background thread
-        # (submit when free, pick up the result when ready) so it never blocks. It
-        # only raises the count (a missed turn); the fast menu drives the live value.
-        self.chat.submit(frame)
+        # Chat ("Turn N started!") is ground truth; the slow OCR runs on a
+        # background thread (submit when free, pick up the result when ready) so it
+        # never blocks. It corrects the menu count in BOTH directions:
+        #  - UP immediately for a missed turn;
+        #  - DOWN for a menu over-count, but only once the menu has been quiet for
+        #    TURN_DOWN_GUARD_S, so a stale async read just after a real advance
+        #    can't briefly drag the live count below the truth.
+        # Poll BEFORE submit: consume any finished read first, then start the next
+        # one. (Submitting first would replace a just-finished future and lose its
+        # result, so the turn never arrived -- the long-standing chat bug.)
         chat_turn = self.chat.poll()
+        self.chat.submit(frame)
         if chat_turn is not None:
-            self.turns.observe(chat_turn, asleep)
+            if self.debug and chat_turn != self._last_chat_turn:  # shows the chat IS read
+                self._last_chat_turn = chat_turn
+                shown = self.turns.turns_completed + 1
+                print(f"[dbg] chat: Turn {chat_turn}  (counter at Turn {shown})")
+            # Don't chat-correct during turn 1. At battle start the PREVIOUS battle's
+            # higher "Turn N" still lingers in the chat (and the async OCR lags a
+            # frame or two, so a read can land that was captured before the new
+            # battle's "Turn 1 started!" was even printed). Turn 1 is the battle-start
+            # default and needs no correction; from turn 2 on the menu has advanced
+            # the count, the intro is long over, and the chat is the new battle's own.
+            if self.turns.turns_completed == 0:
+                chat_turn = None
+        if chat_turn is not None:
+            completed = chat_turn - 1
+            cur = self.turns.turns_completed
+            if completed < cur and now - self._last_advance > TURN_DOWN_GUARD_S:
+                self.turns.set_turn(chat_turn)  # down: a menu over-count, menu now quiet
+                if self.debug:
+                    print(f"[dbg] chat corrected DOWN -> Turn {self.turns.turns_completed + 1}")
+            else:
+                # up OR equal: observe() raises the count for a missed turn (e.g. a
+                # 2-turn move; no-op when already equal) AND keeps the consecutive
+                # sleep-turn counter in sync, which the Dream Ball needs. Turn
+                # counting is unchanged -- observe() only ever raises turns_completed.
+                before = self.turns.turns_completed
+                self.turns.observe(chat_turn, asleep)
+                if self.debug and self.turns.turns_completed > before:
+                    print(f"[dbg] chat corrected UP -> Turn {self.turns.turns_completed + 1}")
 
         # `bt` (menu/action/catch templates, ~10 ms) was read in the loop and is
         # passed in: it drives the chat-independent turn counter (command menu
         # reappears each turn) and catch detection ("Gotcha!").
-        # Count menu turns only in a SINGLE battle. During a horde (MULTI) the
-        # multi-target attack/faint animation makes the menu flicker repeatedly,
-        # which would over-count; the chat tracks the real turn through the horde,
-        # and menu counting resumes once one Pokemon remains.
-        if reading.state is BattleState.SINGLE:
-            self.turns.observe_menu(bt.menu_present, bt.action)
+        # Count turns from the command menu + committed-action text in BOTH single
+        # and multi. A horde has one of YOUR Pokemon (one menu per turn); a double
+        # shows two selection menus, but they aren't separated by an action text,
+        # so the action-gating still counts exactly once per turn. This is
+        # chat-independent (works with the chat hidden); the chat only corrects up.
+        #
+        # The only hazard in multi is the menu template flickering during the busy
+        # multi-target animation, which would look like the menu reappearing. So
+        # debounce the menu signal: only accept a present/absent change after it
+        # has held for MENU_STABLE_FRAMES frames.
+        if bt.menu_present == self._menu_raw:
+            self._menu_streak += 1
+        else:
+            self._menu_raw = bt.menu_present
+            self._menu_streak = 1
+        if self._menu_streak >= MENU_STABLE_FRAMES:
+            self._menu_stable = self._menu_raw
+        before = self.turns.turns_completed
+        self.turns.observe_menu(self._menu_stable, bt.action)
+        if self.turns.turns_completed > before:
+            self._last_advance = now  # for the chat down-correction guard
+            if self.debug:
+                print(f"[dbg] menu -> Turn {self.turns.turns_completed + 1}")
         # Decide trainer vs wild ONCE per battle, and only while the command menu is
         # up: then the scene is static, so the party-icon strip below the bar is
         # reliable. Checking during animations gave false positives.
         stable = bt.menu_present and reading.state is BattleState.SINGLE
         if stable and not self._trainer_decided:
-            self._is_trainer = is_trainer_battle(frame, reading.bars[0], self.cal.trainer)
+            bar = reading.bars[0]
+            # A horde is always wild. When it narrows to one bar, the party-icon
+            # strip below that bar catches the other (fainted) horde mons + scene
+            # and falsely reads as a trainer party. Two resolution-independent
+            # signals mark it as a horde remnant (-> skip the trainer check):
+            #  1. _was_horde: we saw the spread pack earlier this battle (primary).
+            #  2. position: a lone bar right of the canonical single-enemy slot is a
+            #     remnant (backup, in case the pack was never cleanly counted).
+            x_frac = bar.x / frame.shape[1]
+            if self._was_horde or x_frac > HORDE_REMNANT_X_FRAC:
+                self._is_trainer = False
+            else:
+                self._is_trainer = is_trainer_battle(frame, bar, self.cal.trainer)
             self._trainer_decided = True
             if self._is_trainer:
                 print("trainer battle: overlay hidden")
@@ -385,18 +612,42 @@ class LiveLoop:
         if self._catch_streak >= 2 and not self._caught_printed and self.cached is not None:
             print(f"caught {self.cached['name']}!")
             self._caught_printed = True
+            self._on_catch(self.cached)
+            # A fresh catch has no OT ball yet (that only shows on already-owned
+            # species), so record it here so it drops off the dex list at once.
+            if self.dex is not None and self.cached.get("id"):
+                self.dex.record_caught(self.cached["id"])
 
         if reading.state is BattleState.SINGLE:
-            if self._is_trainer:
-                self.overlay.hide_battle()  # trainer: nothing catchable
-            else:
+            # Negative test: only show the catch overlay once we're SURE it's a
+            # wild battle (trainer detection has run and said "not trainer"). This
+            # avoids briefly flashing the overlay before a trainer is confirmed.
+            if self._trainer_decided and not self._is_trainer:
                 self._update_single(frame, reading.bars[0], rect)
+            else:
+                self.overlay.hide_battle()
         elif reading.state is BattleState.MULTI and self.last_line != "multi":
             # horde / double: wait until a single wild Pokemon remains
             print("multiple enemy bars (horde): waiting for one to remain")
             self.last_line = "multi"
             self.overlay.hide_battle()
         # NO_BATTLE while in battle = intro/animation: keep the overlay as is
+
+    def _on_catch(self, enemy: dict) -> None:
+        """Advance the Repeat Ball catch chain after a successful catch: +1 if it
+        matches the active chain species, else restart the chain at this species."""
+        sid = enemy.get("id")
+        if sid is None:
+            return
+        length = self._chain.record_catch(sid)
+        if self.debug:
+            print(f"[dbg] repeat chain: {enemy.get('name')} x{length}")
+
+    def _chain_for(self, enemy: dict | None) -> int:
+        """The current catch chain length that applies to THIS enemy: the running
+        chain if it's the same species, else 0 (Repeat Ball shows 1x for a fresh
+        species)."""
+        return self._chain.length_for(enemy.get("id") if enemy else None)
 
     def _update_single(self, frame, bar, rect) -> None:
         hp_pct = self.hp.update(bar.hp_pct)  # wait for the bar to settle
@@ -418,6 +669,20 @@ class LiveLoop:
             if sp is not None and sp.get("level") is not None and sp["name"] == self.cached["name"]:
                 self.cached["level"] = sp["level"]
 
+        # Record the enemy as OT-caught once per battle, the moment its species is
+        # known and the red/white Poke Ball icon shows next to the name. This grows
+        # the caught list as you play and removes the species from "missing here".
+        if (
+            self.dex is not None
+            and not self._ot_checked
+            and self.cached is not None
+            and self.cached.get("id")
+            and read_caught_icon(frame, bar, self.cal.caught_icon)
+        ):
+            self._ot_checked = True
+            if self.dex.record_caught(self.cached["id"]):
+                print(f"dex: recorded OT-caught {self.cached['name']}")
+
         turn_note = f"turn {self.turns.turns_completed + 1}"
         if self.turns.turns_asleep:
             turn_note += f", asleep {self.turns.turns_asleep}"
@@ -428,7 +693,9 @@ class LiveLoop:
                 self.cached,
                 turns_completed=self.turns.turns_completed,
                 turns_asleep=self.turns.turns_asleep,
+                enemy_asleep=status == "slp",
                 dusk_active=self.dusk_active,
+                repeat_chain=self._chain_for(self.cached),
             )
             probs = ball_probs(
                 hp_pct, self.cached["catch_rate"], self.status_rates[status], self.balls, ctx
@@ -450,15 +717,102 @@ class LiveLoop:
             print(line)
             self.last_line = line
 
+    def _is_night(self, frame) -> bool:
+        """Is it within the Dusk Ball night window (21:00-07:59 game time)? Reads
+        the HUD clock the player sees; falls back to the deterministic UTC game
+        time if the clock can't be read."""
+        minute = read_game_clock(frame, self.cal.hud_time)
+        if minute is None:
+            minute = current_game_minute()
+        return is_dusk_ball_night(minute)
+
+    def _update_dex(self, hud_name: str) -> LocationView | None:
+        """Resolve the HUD location to a view and log the panel when it changes.
+        Returns the view (or None) so the caller can drive the overlay panel."""
+        if self.dex is None or not hud_name:
+            return None
+        self._last_hud = hud_name
+        view = self.dex.on_location(hud_name)
+        panel = dex_panel_text(view)
+        if panel and panel != self._dex_log:
+            print(panel)
+            self._dex_log = panel
+        return view
+
+    def _refresh_dex_panel(self) -> None:
+        """Re-render the panel for the current location (after a toggle/profile
+        change) so the moved species and counts update immediately."""
+        if self.dex is None or self.dex_panel is None or not self._last_hud:
+            return
+        view = self.dex.on_location(self._last_hud)
+        if view is not None:
+            self.dex_panel.show_here(view)
+
+    def _dex_toggle_caught(self, dex_id: int) -> None:
+        if self.dex is None:
+            return
+        now = self.dex.toggle_caught(dex_id)
+        print(f"dex: {'marked' if now else 'un-marked'} #{dex_id} as caught")
+        self._refresh_dex_panel()
+
+    def _dex_use_profile(self, name: str) -> None:
+        """Switch to (or create) an account profile and reload its caught list."""
+        cfg = AccountConfig.load(USERDATA)
+        account = cfg.use(name)
+        if self.dex is not None:
+            self.dex.set_caught(CaughtStore.for_account(USERDATA, account))
+        print(f"dex: active account '{account}'")
+        self._refresh_dex_panel()
+
+    def _dex_delete_profile(self, name: str) -> None:
+        """Delete a profile and its caught list; if it was active, switch to a
+        remaining one (or a fresh 'default')."""
+        cfg = AccountConfig.load(USERDATA)
+        cfg.delete(name)
+        delete_account_data(USERDATA, name)
+        account = cfg.active or cfg.use("default")
+        if self.dex is not None:
+            self.dex.set_caught(CaughtStore.for_account(USERDATA, account))
+        print(f"dex: deleted profile '{name}', active now '{account}'")
+        self._refresh_dex_panel()
+
+    def _dex_profiles(self) -> tuple[str | None, list[str]]:
+        cfg = AccountConfig.load(USERDATA)
+        return cfg.active, cfg.accounts
+
+
+def build_dex(account_override: str | None) -> DexSession | None:
+    """Build the dex session for the active account, or None if the encounter
+    data is missing. The active account is chosen manually and remembered: an
+    explicit --account wins, else the last used one, else a 'default' profile."""
+    if not ENCOUNTERS_PATH.exists():
+        print("dex: encounters.json not found (run scripts/update_data.py) — dex disabled")
+        return None
+    data = EncounterData.load(ENCOUNTERS_PATH, LEGENDARIES_PATH)
+    cfg = AccountConfig.load(USERDATA)
+    account = cfg.resolve_active(account_override)
+    if account is None:
+        account = cfg.use("default")
+        print("dex: no account set — using 'default' (pass --account NAME per character)")
+    caught = CaughtStore.for_account(USERDATA, account)
+    print(f"dex: account '{account}' — {len(caught.caught)} species marked caught")
+    return DexSession(data, caught)
+
 
 def run(
     species_override: dict | None,
     status_override: str | None,
     cal: Calibration,
+    account: str | None = None,
+    debug: bool = False,
 ) -> None:
     app = QApplication(sys.argv[:1])
     overlay = Overlay([b["name"] for b in load_balls()])
-    loop = LiveLoop(species_override, status_override, cal, overlay)
+    dex = build_dex(account)
+    dex_panel = DexPanel() if dex is not None else None
+    loop = LiveLoop(
+        species_override, status_override, cal, overlay, dex=dex, dex_panel=dex_panel, debug=debug
+    )
     loop.start()
     try:
         code = app.exec()
@@ -491,6 +845,16 @@ def main() -> None:
         action="store_true",
         help="diagnostic: list visible windows and PokeMMO matches, then exit",
     )
+    parser.add_argument(
+        "--account",
+        help="PokeMMO account/character for the dex caught-list (remembered; "
+        "defaults to the last used)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="verbose turn-counter diagnostics (chat reads, menu advances)",
+    )
     args = parser.parse_args()
 
     if args.list_windows:
@@ -512,7 +876,7 @@ def main() -> None:
 
     set_dpi_awareness()
     try:
-        run(species_override, args.status, cal)
+        run(species_override, args.status, cal, account=args.account, debug=args.debug)
     except KeyboardInterrupt:
         sys.exit(0)
 

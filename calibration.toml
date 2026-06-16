@@ -81,6 +81,12 @@ dx0 = -24
 dx1 = -3
 dy0 = -28
 dy1 = -7
+# In a spread HORDE (3x/5x, or a horde narrowed to a few), the bar is laid out
+# differently: the status badge sits to the RIGHT of the fill start, not the left.
+# Measured on horde_triple_wild_encounter (SLP) and 5x_horde_sleep. Same dy.
+# read_enemy_bars uses these for spread-horde bars and dx0/dx1 otherwise.
+horde_dx0 = 14
+horde_dx1 = 40
 # Every badge has a dark border + icon; the empty no-status slot is plain
 # background (sky/cave) with no dark pixels. dark_frac is the presence signal:
 # 0.00 for all no-status fixtures, >=0.13 for all badge fixtures.
@@ -117,6 +123,17 @@ left = 0.0
 right = 0.18
 upscale = 3
 
+[hud_time]
+# Top-left HUD clock line ("Saturday, 10:23"), just below location + money. OCR'd
+# to decide if it is night (Dusk Ball boost). The "HH:MM" is parsed out, so the
+# money line caught at the top of the crop is harmless. Verified on the *_cave /
+# overworld fixtures (10:23, 11:47, 09:27, 10:00, 10:43).
+top = 0.05
+bottom = 0.085
+left = 0.0
+right = 0.16
+upscale = 3
+
 [trainer]
 # Trainer battles show a party indicator — six small icons (grey circles / Poke
 # balls / Pokemon icons) — in a fixed strip just below the enemy HP bar, which
@@ -150,12 +167,23 @@ min_dark_frac = 0.90
 # is letterboxed and shifts with window size) the chat sits at a stable window
 # position, so a fractional crop is reliable. It prints "Turn N started!", which
 # the turn counter reads via OCR. Verified legible on full_health_no_status
-# (shows "Turn 2 started!"). Requires the battle chat to be visible.
+# (shows "Turn 2 started!") and live_turn9_gible (Turn 9). Captures ~7 lines, so
+# "Turn N started!" stays in view for several follow-up messages (move/effect/
+# faint), which lets a 2-turn move (Fly/Solarbeam: no menu that turn) still be
+# corrected from the chat. Requires the battle chat to be visible.
 top = 0.90
 bottom = 0.985
 left = 0.0
 right = 0.40
 upscale = 2
+# The chat box is fixed pixel size, so `right` (a fraction of WIDTH) over-captures
+# on wide windows: at 3438 px wide, 0.40 is a 1375 px crop that is mostly empty and
+# OCR shrinks it until the chat text is illegible (the turn stopped updating live on
+# an ultrawide window). The actual chat text never reaches past ~330 px from the
+# left (measured: full_health_no_status 330 px @ w=1996, live_turn9_gible 213 px @
+# w=1382), so cap the crop width well above that. Kills the wide-window bloat
+# (1375 -> 600) while leaving normal/narrow windows unchanged.
+max_width_px = 600
 
 [battle_text]
 # The in-viewport text area at the bottom of the centered battle viewport, which
@@ -198,3 +226,25 @@ dy1 = -6
 upscale = 3
 # rapidfuzz WRatio 0-100; below this the OCR result is treated as unrecognized.
 min_match_score = 70.0
+
+[caught_icon]
+# An OT-caught wild species shows a red/white Poke Ball icon right of the name.
+# Only the standard red ball means you (OT) caught it; a traded/evolved species
+# shows a (mostly white) Premier Ball and an un-owned one shows no ball -- both
+# fall below min_red_px. Detected by the ball's saturated-red top half in a band
+# relative to the bar (fixed-size UI). Measured: 61 red px present (full_health_
+# water Mantine, full_health_no_status Cascoon, red_health_no_status_cave Onix,
+# full_health_paralyzed, full_health_sleeping) vs 0 absent (full_health_trainer_
+# battle_poisoned Pachirisu, whose pink female symbol is hue ~156, outside red).
+dx0 = 0
+dx1 = 250
+dy0 = -38
+dy1 = -4
+# Red hue wraps 0/179: a pixel is red if hue <= red_h_low OR hue >= red_h_high.
+red_h_low = 8
+red_h_high = 172
+sat_min = 120
+val_min = 110
+# Threshold well below 61 (present) and above 0 (absent); tolerates a smaller
+# ball at lower window resolutions.
+min_red_px = 15

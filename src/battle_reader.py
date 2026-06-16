@@ -57,6 +57,7 @@ class BarReading:
 class BattleReading:
     state: BattleState
     bars: tuple[BarReading, ...]
+    is_horde: bool = False  # spread (3x/5x) layout -- bars across the top, not stacked
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,8 @@ class StatusCalibration(BaseModel):
     dx1: int
     dy0: int
     dy1: int
+    horde_dx0: int  # status badge x-range for spread HORDE bars (right of the fill)
+    horde_dx1: int
     dark_val_max: int
     present_dark_frac: float
     fill_sat_min: int
@@ -156,6 +159,20 @@ class ChatCalibration(BaseModel):
     left: float
     right: float
     upscale: int
+    # The chat box is fixed pixel size at the window's bottom-left, so `right` (a
+    # fraction of WIDTH) over-captures badly on wide windows: at 3438 px, 0.40 is a
+    # 1375 px crop that is mostly empty, and OCR downscales it until the small chat
+    # text is illegible. Cap the crop width here so it stays a tight, legible strip
+    # regardless of window width. 0 disables the cap.
+    max_width_px: int = 0
+
+    def crop_x(self, width: int) -> tuple[int, int]:
+        """(x0, x1) of the chat crop for a frame this wide, width-capped."""
+        x0 = int(width * self.left)
+        x1 = int(width * self.right)
+        if self.max_width_px:
+            x1 = min(x1, x0 + self.max_width_px)
+        return x0, x1
 
 
 class BattleTextCalibration(BaseModel):
@@ -183,6 +200,18 @@ class LocationCalibration(BaseModel):
     upscale: int
 
 
+class CaughtIconCalibration(BaseModel):
+    dx0: int
+    dx1: int
+    dy0: int
+    dy1: int
+    red_h_low: int
+    red_h_high: int
+    sat_min: int
+    val_min: int
+    min_red_px: int
+
+
 class Calibration(BaseModel):
     hp_bar: HpBarCalibration
     status: StatusCalibration
@@ -192,6 +221,8 @@ class Calibration(BaseModel):
     battle_text: BattleTextCalibration
     trainer: TrainerCalibration
     location: LocationCalibration
+    hud_time: LocationCalibration  # same top-left HUD crop shape, for the clock line
+    caught_icon: CaughtIconCalibration
 
 
 def load_calibration(path: Path | str) -> Calibration:
@@ -367,8 +398,50 @@ def read_status(hsv_full: np.ndarray, x: int, y: int, cal: StatusCalibration) ->
     return classify_status_box(hsv_full[y0:y1, x0:x1], cal)
 
 
-def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]:
-    """Find and measure all enemy HP bars in the frame, top to bottom."""
+# A horde (3x/5x) spreads its bars horizontally; a single/double keeps them at the
+# left (a double stacks them vertically at the SAME x). If the bars' x-range
+# exceeds this, it's a spread horde -> the status badge is read at the horde offset.
+HORDE_SPREAD_PX = 80
+
+# A single enemy / trainer / wild-double bar sits in the canonical top-left slot; a
+# horde spreads its bars across the centre. A lone (or stacked) bar found right of
+# this fraction is therefore a horde mon that outlasted its pack -- its status badge
+# is on the RIGHT of the fill (horde layout), even though the horizontal-spread test
+# can no longer see it. Measured x-fractions across every fixture (ratio 1.31-2.39,
+# width 1182-3437 px): singles 0.171-0.188, horde bars 0.318-0.691. The threshold
+# sits at the midpoint of that gap so BOTH sides keep ~0.06 of margin at any window
+# size -- resolution-independent (a fraction, not pixels). This is only the backup;
+# the primary signal is the 560 px+ spread of a fresh horde, which latches reliably
+# at every resolution. Mirrors HORDE_REMNANT_X_FRAC in app.py (trainer-skip).
+REMNANT_X_FRAC = 0.25
+
+
+def _bars_spread(bars: list[BarReading]) -> bool:
+    """True if 2+ bars are spread horizontally (a horde), vs stacked (a double)."""
+    if len(bars) < 2:
+        return False
+    return bool(max(b.x for b in bars) - min(b.x for b in bars) > HORDE_SPREAD_PX)
+
+
+def _is_horde_layout(bars: list[BarReading], frame_width: int, horde_hint: bool) -> bool:
+    """Whether these bars use the spread-horde layout (status badge RIGHT of the
+    fill): the caller's hint, OR 2+ bars spread horizontally, OR ANY bar sitting
+    right of the single-enemy slot. The last case catches a horde narrowed to its
+    remnant(s) -- one lone bar, or two left-column mons stacked at the centre x --
+    which a single/trainer/wild-double (always in the left slot) never is."""
+    if horde_hint or _bars_spread(bars):
+        return True
+    return any(b.x > frame_width * REMNANT_X_FRAC for b in bars)
+
+
+def read_enemy_bars(
+    frame_bgr: np.ndarray, cal: Calibration, horde: bool = False
+) -> list[BarReading]:
+    """Find and measure all enemy HP bars in the frame, top to bottom.
+
+    `horde` forces the spread-horde status-badge offset (used for a horde narrowed
+    to one bar, which can't be told apart by layout); otherwise it's auto-detected
+    from the bars' horizontal spread."""
     c = cal.hp_bar
     h, w = frame_bgr.shape[:2]
     y0, y1 = int(h * c.search_top), int(h * c.search_bottom)
@@ -409,8 +482,8 @@ def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]
         # not 97%. Single bars measure 218 and are unchanged.
         inner = _inner_width(hsv_full, y0 + by, y0 + by + bh - 1, rx0, c)
         hp_pct = min(100.0, 100.0 * fill_w / inner)
-        status = read_status(hsv_full, rx0, fy, cal.status)
-        bars.append(BarReading(hp_pct=round(hp_pct, 1), color=color, status=status, x=rx0, y=fy))
+        # status read AFTER the layout is known (its badge offset differs in hordes)
+        bars.append(BarReading(round(hp_pct, 1), color, Status.NONE, rx0, fy))
 
     # Merge duplicate detections of the SAME bar (multiple blobs per fill), which
     # land at the same x AND y. Horde bars sit at the same y but different x, so
@@ -428,7 +501,16 @@ def read_enemy_bars(frame_bgr: np.ndarray, cal: Calibration) -> list[BarReading]
                 merged[-1] = bar
             continue
         merged.append(bar)
-    return merged
+
+    # Spread horde, the caller's hint, OR a lone remnant sitting at the horde slot
+    # -> the status badge is on the RIGHT of the fill, not the left. Read each bar's
+    # status with the matching offset.
+    s = cal.status
+    if _is_horde_layout(merged, w, horde):
+        s = s.model_copy(update={"dx0": s.horde_dx0, "dx1": s.horde_dx1})
+    return [
+        BarReading(b.hp_pct, b.color, read_status(hsv_full, b.x, b.y, s), b.x, b.y) for b in merged
+    ]
 
 
 def is_battle_ui_present(frame_bgr: np.ndarray, cal: BattleUiCalibration) -> bool:
@@ -462,6 +544,29 @@ def is_trainer_battle(frame_bgr: np.ndarray, bar: BarReading, cal: TrainerCalibr
     gray = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150)
     return float(np.mean(edges)) / 255.0 >= cal.edge_frac_min
+
+
+def read_caught_icon(frame_bgr: np.ndarray, bar: BarReading, cal: CaughtIconCalibration) -> bool:
+    """True if the enemy species is OT-caught: a red/white Poke Ball icon sits
+    right of its name.
+
+    PokeMMO marks a wild species you have caught with a Poke Ball next to the
+    name; only the standard red/white ball means *you* caught it (OT). A species
+    obtained by trade/evolution shows a (mostly white) Premier Ball, and an
+    un-owned one shows no ball -- both have too few saturated-red pixels to pass.
+    The icon's red top half is the signal: measured 61 red px when present vs 0
+    absent, with the pink female symbol (hue ~156) outside the red range. The
+    search band is relative to the bar (fixed-size UI). See [caught_icon]."""
+    h, w = frame_bgr.shape[:2]
+    x0, x1 = max(0, bar.x + cal.dx0), min(w, bar.x + cal.dx1)
+    y0, y1 = max(0, bar.y + cal.dy0), min(h, bar.y + cal.dy1)
+    if x1 <= x0 or y1 <= y0:
+        return False
+    hsv = cv2.cvtColor(frame_bgr[y0:y1, x0:x1], cv2.COLOR_BGR2HSV)
+    hue, sat, val = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+    is_red = (hue <= cal.red_h_low) | (hue >= cal.red_h_high)
+    red = is_red & (sat >= cal.sat_min) & (val >= cal.val_min)
+    return int(np.count_nonzero(red)) >= cal.min_red_px
 
 
 class BattleTextReader:
@@ -509,12 +614,13 @@ class BattleTextReader:
         return float(cv2.matchTemplate(gray, tpl, cv2.TM_CCOEFF_NORMED).max())
 
 
-def read_battle(frame_bgr: np.ndarray, cal: Calibration) -> BattleReading:
-    bars = read_enemy_bars(frame_bgr, cal)
+def read_battle(frame_bgr: np.ndarray, cal: Calibration, horde: bool = False) -> BattleReading:
+    bars = read_enemy_bars(frame_bgr, cal, horde=horde)
     if not bars:
         state = BattleState.NO_BATTLE
     elif len(bars) == 1:
         state = BattleState.SINGLE
     else:
         state = BattleState.MULTI
-    return BattleReading(state=state, bars=tuple(bars))
+    is_horde = _is_horde_layout(bars, frame_bgr.shape[1], horde)
+    return BattleReading(state=state, bars=tuple(bars), is_horde=is_horde)

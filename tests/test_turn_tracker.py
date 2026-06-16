@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import cv2
 
-from battle_log import parse_turn_number, read_turn_number
+from battle_log import AsyncChatReader, parse_turn_number, read_turn_number
 from battle_reader import BattleTextReader, load_calibration
 from turn_tracker import TurnTracker
 
@@ -102,8 +103,18 @@ def test_parse_turn_number():
     assert parse_turn_number([]) is None
 
 
-def test_parse_turn_number_takes_highest():
-    assert parse_turn_number(["Turn 3 started", "Turn 4 started", "Turn 2 started"]) == 4
+def test_parse_turn_number_takes_bottommost_line():
+    # The chat is chronological (oldest at top). Within one battle, turns climb, so
+    # the bottommost line is also the current turn.
+    assert parse_turn_number(["Turn 2 started", "Turn 3 started", "Turn 4 started"]) == 4
+
+
+def test_parse_turn_number_ignores_previous_battle_at_top():
+    # The live bug: a new battle starts while the previous battle's higher "Turn N"
+    # is still visible ABOVE the new "Turn 1" at the bottom. The bottommost line --
+    # the new battle's -- must win, not the highest number.
+    lines = ["Turn 11 started!", "A wild Corsola appeared!", "Turn 1 started!"]
+    assert parse_turn_number(lines) == 1
 
 
 def test_tracker_starts_at_zero():
@@ -221,6 +232,36 @@ def test_browse_cancel_without_action_does_not_count():
     assert t.turns_completed == 1
 
 
+def test_set_turn_corrects_both_directions_and_menu_continues():
+    t = TurnTracker()
+    start_battle(t)
+    t.observe(5, enemy_asleep=False)  # menu/chat say turn 5
+    assert t.turns_completed == 4
+    t.set_turn(2)  # chat over-count fix -> correct DOWN to turn 2
+    assert t.turns_completed == 1
+    commit_turn(t)  # menu continues from the corrected value, not back to 5
+    assert t.turns_completed == 2
+    t.set_turn(8)  # also corrects up
+    assert t.turns_completed == 7
+
+
+def test_double_two_selection_menus_count_one_turn():
+    # In a wild double you pick a move for BOTH your Pokemon: two menus appear,
+    # but they are NOT separated by a committed-action text, so the action-gating
+    # counts the turn exactly once (this is why menu counting is safe in multi).
+    t = TurnTracker()
+    start_battle(t)
+    menu(t, True)  # select Pokemon 1 (first appearance already consumed by intro)
+    menu(t, False)
+    menu(t, True)  # select Pokemon 2 -- no action since -> no extra count
+    assert t.turns_completed == 0
+    menu(t, False, action=True)  # resolution: an action ran
+    menu(t, True)  # next turn, Pokemon 1 -> counts once
+    menu(t, False)
+    menu(t, True)  # next turn, Pokemon 2 -> no action since -> no extra count
+    assert t.turns_completed == 1
+
+
 def test_chat_overrides_menu_count_upward():
     t = TurnTracker()
     start_battle(t)
@@ -252,3 +293,21 @@ def test_menu_count_survives_reset():
     for _ in range(10):
         menu(t, True)
     assert t.turns_completed == 0
+
+
+def test_async_chat_reader_delivers_turn_despite_submit_before_poll():
+    # Regression: submit() must not overwrite a finished-but-unpolled future, or
+    # the turn is never delivered (the long-standing "chat never corrects" bug).
+    img = cv2.imread(str(ROOT / "fixtures" / "full_health_no_status.png"))
+    reader = AsyncChatReader(CAL.chat)
+    try:
+        got = None
+        for _ in range(60):  # ~6s budget incl. the one-time OCR init
+            reader.submit(img)  # deliberately the OLD order (submit before poll)
+            got = reader.poll()
+            if got is not None:
+                break
+            time.sleep(0.1)
+    finally:
+        reader.shutdown()
+    assert got == 2  # "Turn 2 started!" in that fixture's chat

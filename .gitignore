@@ -35,3 +35,6 @@ Desktop.ini
 # Local artifacts
 *.log
 fixtures/_debug_crops/
+
+# Per-account user data (caught lists, active-account config) -- local only
+userdata/

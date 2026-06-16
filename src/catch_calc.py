@@ -28,10 +28,11 @@ class BattleContext:
 
     turns_completed: int = 0
     turns_asleep: int = 0
+    enemy_asleep: bool = False  # current sleep status (Dream Ball requires it)
     enemy_types: tuple[str, ...] = ()
     enemy_level: int = 1
     dusk_active: bool = False  # night or cave (Dusk Ball condition)
-    already_caught: bool = False  # Repeat Ball condition (unconfirmed rule)
+    repeat_chain: int = 0  # consecutive catches of THIS species in an unbroken series (Repeat Ball)
 
 
 def _quick(ctx: BattleContext) -> float:
@@ -54,9 +55,27 @@ def _dusk(ctx: BattleContext) -> float:
     return 2.5 if ctx.dusk_active else 1.0
 
 
+# Dream Ball by consecutive sleep turns (PokeMMO capture calculator): 0/1/2/3
+# turns -> 1x / 1.5x / 2.5x / 4x; more turns stay at the 4x cap.
+_DREAM_BY_SLEEP = (1.0, 1.5, 2.5, 4.0)
+
+
 def _dream(ctx: BattleContext) -> float:
-    # pokemmo.help: scales with turns asleep, 0-3 turns -> 1x..4x.
-    return min(4.0, 1.0 + ctx.turns_asleep)
+    # The boost only applies while the enemy is actually asleep; otherwise 1x.
+    if not ctx.enemy_asleep:
+        return 1.0
+    return _DREAM_BY_SLEEP[min(max(ctx.turns_asleep, 0), 3)]
+
+
+# Repeat Ball (PokeMMO): +0.1x for each consecutive catch of the SAME species in
+# an unbroken series, starting at 1.0x and capping at 2.5x once 15 are chained
+# (1.0 + 0.1*15). The chain breaks when the series is interrupted (see app.py).
+_REPEAT_STEP = 0.1
+_REPEAT_MAX = 2.5
+
+
+def _repeat(ctx: BattleContext) -> float:
+    return min(1.0 + _REPEAT_STEP * max(ctx.repeat_chain, 0), _REPEAT_MAX)
 
 
 # Conditional ball rules, keyed by the "rule" field in balls.json.
@@ -67,6 +86,7 @@ BALL_RULES: dict[str, Callable[[BattleContext], float]] = {
     "nest": _nest,
     "dusk": _dusk,
     "dream": _dream,
+    "repeat": _repeat,
 }
 
 
