@@ -532,6 +532,15 @@ class LiveLoop:
                 self._last_chat_turn = chat_turn
                 shown = self.turns.turns_completed + 1
                 print(f"[dbg] chat: Turn {chat_turn}  (counter at Turn {shown})")
+            # Don't chat-correct during turn 1. At battle start the PREVIOUS battle's
+            # higher "Turn N" still lingers in the chat (and the async OCR lags a
+            # frame or two, so a read can land that was captured before the new
+            # battle's "Turn 1 started!" was even printed). Turn 1 is the battle-start
+            # default and needs no correction; from turn 2 on the menu has advanced
+            # the count, the intro is long over, and the chat is the new battle's own.
+            if self.turns.turns_completed == 0:
+                chat_turn = None
+        if chat_turn is not None:
             completed = chat_turn - 1
             cur = self.turns.turns_completed
             if completed < cur and now - self._last_advance > TURN_DOWN_GUARD_S:
