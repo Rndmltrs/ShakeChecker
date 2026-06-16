@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import pytest
 
+from battle_log import read_turn_number
 from battle_reader import (
     BattleState,
     is_battle_ui_present,
@@ -142,6 +143,42 @@ def test_single_enemy_not_flagged_as_remnant():
     assert reading.state == BattleState.SINGLE
     assert reading.is_horde is False
     assert reading.bars[0].status.value == "slp"
+
+
+# --- real ultrawide 5x-horde fixtures (3435 px wide, farmed Kingler horde) ---
+
+
+def test_ultrawide_horde_two_remnants_stacked():
+    # A 5x horde narrowed to its two left-column mons: both bars stack at the SAME
+    # centre x (not the left single slot), so they must still read as a MULTI horde
+    # (overlay stays hidden until one remains). Locks the "any bar past the slot"
+    # horde-layout rule against a real wide-window capture.
+    img = cv2.imread(str(FIXTURES / "5x_horde_2leftremain_3435x1438.png"))
+    reading = read_battle(img, CAL)
+    assert len(reading.bars) == 2
+    assert reading.state == BattleState.MULTI
+    assert reading.is_horde is True
+    assert all(b.x > img.shape[1] * 0.30 for b in reading.bars)  # centre, not left slot
+
+
+def test_ultrawide_horde_remnant_reads_slp():
+    # THE live bug: the last Kingler of a farmed 5x horde sits at the centre slot,
+    # asleep. Its status badge is on the RIGHT of the fill (horde layout); position
+    # alone (no hint) must pick that up so SLP reads -> Dream Ball scales correctly.
+    reading = read("5x_horde_lowerleftremnant_slp_3435x1438.png")
+    assert reading.state == BattleState.SINGLE
+    assert reading.is_horde is True
+    assert reading.bars[0].status.value == "slp"
+
+
+def test_chat_turn_reads_on_ultrawide_window():
+    # The chat crop is width-capped so it stays legible on very wide windows: at
+    # 3435 px the old 0.40-of-width crop ballooned and OCR shrank the text until the
+    # turn stopped updating live. Both ultrawide fixtures must still yield the turn.
+    one = cv2.imread(str(FIXTURES / "5x_horde_lowerleftremnant_slp_3435x1438.png"))
+    assert read_turn_number(one, CAL.chat) == 5
+    two = cv2.imread(str(FIXTURES / "5x_horde_2leftremain_3435x1438.png"))
+    assert read_turn_number(two, CAL.chat) == 2
 
 
 def test_double_status_not_broken_by_horde_logic():
