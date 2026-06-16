@@ -422,11 +422,13 @@ def _bars_spread(bars: list[BarReading]) -> bool:
 
 def _is_horde_layout(bars: list[BarReading], frame_width: int, horde_hint: bool) -> bool:
     """Whether these bars use the spread-horde layout (status badge RIGHT of the
-    fill): the caller's hint, OR 2+ bars spread horizontally, OR a lone bar sitting
-    right of the single-enemy slot (a horde narrowed to its last remnant)."""
+    fill): the caller's hint, OR 2+ bars spread horizontally, OR ANY bar sitting
+    right of the single-enemy slot. The last case catches a horde narrowed to its
+    remnant(s) -- one lone bar, or two left-column mons stacked at the centre x --
+    which a single/trainer/wild-double (always in the left slot) never is."""
     if horde_hint or _bars_spread(bars):
         return True
-    return bool(len(bars) == 1 and bars[0].x > frame_width * REMNANT_X_FRAC)
+    return any(b.x > frame_width * REMNANT_X_FRAC for b in bars)
 
 
 def read_enemy_bars(
