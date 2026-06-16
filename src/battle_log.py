@@ -20,20 +20,26 @@ import cv2
 import numpy as np
 
 from battle_reader import ChatCalibration
-from ocr_engine import run_ocr
+from ocr_engine import run_ocr_lines, sorted_ocr_lines
 
 # "Turn 2 started!" — tolerate OCR spacing/case noise.
 _TURN = re.compile(r"turn\s*(\d{1,3})\s*start", re.IGNORECASE)
 
 
 def parse_turn_number(texts: list[str]) -> int | None:
-    """Highest "Turn N started" number among OCR text lines, or None."""
-    best: int | None = None
+    """Turn number from the BOTTOMMOST "Turn N started" line, or None.
+
+    `texts` must be ordered top-to-bottom (the chat is chronological: oldest line
+    at the top, newest at the bottom). Taking the last match -- not the highest
+    number -- means that at the very start of a new battle, the previous battle's
+    higher "Turn N" still lingering above is ignored in favour of the new battle's
+    "Turn 1" at the bottom. (Within one battle, turns only climb, so the bottommost
+    is also the highest -- same result.)"""
+    found: int | None = None
     for line in texts:
         for m in _TURN.finditer(line):
-            n = int(m.group(1))
-            best = n if best is None else max(best, n)
-    return best
+            found = int(m.group(1))  # a later (lower) line overrides -> bottommost wins
+    return found
 
 
 def read_turn_number(frame_bgr: np.ndarray, cal: ChatCalibration) -> int | None:
@@ -44,7 +50,7 @@ def read_turn_number(frame_bgr: np.ndarray, cal: ChatCalibration) -> int | None:
     if crop.size == 0:
         return None
     up = cv2.resize(crop, None, fx=cal.upscale, fy=cal.upscale, interpolation=cv2.INTER_CUBIC)
-    return parse_turn_number(run_ocr(up))
+    return parse_turn_number(run_ocr_lines(up))
 
 
 class AsyncChatReader:
@@ -104,4 +110,4 @@ class AsyncChatReader:
             crop, None, fx=self._cal.upscale, fy=self._cal.upscale, interpolation=cv2.INTER_CUBIC
         )
         result, _ = self._ocr(up)
-        return parse_turn_number([text for _box, text, _score in result] if result else [])
+        return parse_turn_number(sorted_ocr_lines(result))

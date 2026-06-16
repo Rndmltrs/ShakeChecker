@@ -103,8 +103,18 @@ def test_parse_turn_number():
     assert parse_turn_number([]) is None
 
 
-def test_parse_turn_number_takes_highest():
-    assert parse_turn_number(["Turn 3 started", "Turn 4 started", "Turn 2 started"]) == 4
+def test_parse_turn_number_takes_bottommost_line():
+    # The chat is chronological (oldest at top). Within one battle, turns climb, so
+    # the bottommost line is also the current turn.
+    assert parse_turn_number(["Turn 2 started", "Turn 3 started", "Turn 4 started"]) == 4
+
+
+def test_parse_turn_number_ignores_previous_battle_at_top():
+    # The live bug: a new battle starts while the previous battle's higher "Turn N"
+    # is still visible ABOVE the new "Turn 1" at the bottom. The bottommost line --
+    # the new battle's -- must win, not the highest number.
+    lines = ["Turn 11 started!", "A wild Corsola appeared!", "Turn 1 started!"]
+    assert parse_turn_number(lines) == 1
 
 
 def test_tracker_starts_at_zero():
