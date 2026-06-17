@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ShakeChecker — live catch rates for PokeMMO</title>
+    <title>ShakeChecker, live catch rates for PokeMMO</title>
     <meta
       name="description"
       content="A read-only overlay for PokeMMO that shows your catch rate for every ball, the moment you're deciding which to throw. Free and open source for Windows."
     />
     <link rel="icon" href="icon.png" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="ShakeChecker — live catch rates for PokeMMO" />
+    <meta property="og:title" content="ShakeChecker, live catch rates for PokeMMO" />
     <meta
       property="og:description"
       content="See your catch rate for every ball, live, while you play. A read-only overlay. Free and open source."
@@ -76,7 +76,9 @@
       .wrap {
         max-width: 1000px;
         margin: 0 auto;
-        padding: 0 18px;
+        /* horizontal only (longhand), so section vertical padding is never zeroed */
+        padding-left: 18px;
+        padding-right: 18px;
       }
       .eyebrow {
         font-family: var(--pixel);
@@ -153,7 +155,8 @@
         display: flex;
         align-items: center;
         gap: 18px;
-        padding: 12px 0;
+        padding-top: 12px;
+        padding-bottom: 12px;
       }
       nav .brand {
         font-family: var(--pixel);
@@ -193,7 +196,8 @@
         grid-template-columns: 1.1fr 0.9fr;
         gap: 30px;
         align-items: center;
-        padding: 56px 0 40px;
+        padding-top: 56px;
+        padding-bottom: 56px;
       }
       .hero h1 {
         font-size: 30px;
@@ -310,11 +314,14 @@
         color: #ff6b6b;
       }
       section {
-        padding: 44px 0;
+        padding: 70px 0;
+      }
+      section + section {
+        border-top: 2px solid rgba(0, 0, 0, 0.25);
       }
       .sec-head {
         text-align: center;
-        margin-bottom: 26px;
+        margin-bottom: 34px;
       }
       .sec-head h2 {
         font-size: 19px;
@@ -416,6 +423,35 @@
       }
       .dots button[aria-current="true"] {
         background: var(--phos);
+      }
+      .shots {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+      }
+      @media (max-width: 700px) {
+        .shots {
+          grid-template-columns: 1fr;
+        }
+      }
+      .shots figure {
+        margin: 0;
+      }
+      .shots a {
+        display: block;
+      }
+      .shots img {
+        width: 100%;
+        display: block;
+        image-rendering: pixelated;
+      }
+      .shots figcaption {
+        font-family: var(--pixel);
+        font-size: 9px;
+        color: var(--phos-dim);
+        letter-spacing: 1px;
+        padding: 12px 14px;
+        text-transform: uppercase;
       }
       ol.steps {
         list-style: none;
@@ -539,6 +575,7 @@
         <span class="links">
           <a class="nl" href="#features">Features</a>
           <a class="nl" href="#video">Video</a>
+          <a class="nl" href="#screens">Screens</a>
           <a class="nl" href="#faq">FAQ</a>
           <a class="btn btn-ghost" href="https://github.com/ghostpixxel/ShakeChecker">GitHub</a>
           <a class="btn btn-primary" href="https://github.com/ghostpixxel/ShakeChecker/releases/latest"
@@ -623,7 +660,7 @@
         <div class="card screen">
           <div class="inner">
             <h3>Location Dex</h3>
-            <p>See which Pokémon you still need on the route you're standing on — tracked per account.</p>
+            <p>See which Pokémon you still need on the route you're standing on, tracked per account.</p>
           </div>
         </div>
         <div class="card screen">
@@ -635,7 +672,7 @@
         <div class="card screen">
           <div class="inner">
             <h3>Any window size</h3>
-            <p>Windowed or borderless, any resolution — resize mid-battle and it keeps reading.</p>
+            <p>Windowed or borderless, any resolution, resize mid-battle and it keeps reading.</p>
           </div>
         </div>
       </div>
@@ -655,6 +692,44 @@
         <button class="arrow next" id="next" aria-label="Next video">›</button>
       </div>
       <div class="dots" id="dots"></div>
+    </section>
+
+    <section id="screens" class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">Screenshots</span>
+        <h2>A closer look</h2>
+        <p>The overlay and the Location Dex, up close. Click any shot to enlarge.</p>
+      </div>
+      <div class="shots">
+        <figure class="screen" onerror="this.style.display='none'">
+          <a href="img/shot-overlay.png" target="_blank" rel="noopener">
+            <img src="img/shot-overlay.png" alt="Catch-rate overlay during a wild battle"
+              onerror="this.closest('figure').style.display='none'" />
+          </a>
+          <figcaption>Catch-rate overlay</figcaption>
+        </figure>
+        <figure class="screen">
+          <a href="img/shot-dex.png" target="_blank" rel="noopener">
+            <img src="img/shot-dex.png" alt="Location Dex panel in the overworld"
+              onerror="this.closest('figure').style.display='none'" />
+          </a>
+          <figcaption>Location Dex</figcaption>
+        </figure>
+        <figure class="screen">
+          <a href="img/shot-status.png" target="_blank" rel="noopener">
+            <img src="img/shot-status.png" alt="Overlay reading a status condition"
+              onerror="this.closest('figure').style.display='none'" />
+          </a>
+          <figcaption>Status &amp; ball rules</figcaption>
+        </figure>
+        <figure class="screen">
+          <a href="img/shot-horde.png" target="_blank" rel="noopener">
+            <img src="img/shot-horde.png" alt="Overlay during a horde battle"
+              onerror="this.closest('figure').style.display='none'" />
+          </a>
+          <figcaption>Hordes</figcaption>
+        </figure>
+      </div>
     </section>
 
     <section id="setup" class="wrap">
@@ -683,7 +758,7 @@
           <h3>Ban-safe by design</h3>
           <p>
             ShakeChecker is built read-only on purpose. It only reads your screen and draws an
-            overlay — it never sends inputs, never reads game memory, and never modifies the client.
+            overlay, it never sends inputs, never reads game memory, and never modifies the client.
             There is nothing for it to automate; you still play every battle yourself.
           </p>
           <div class="chips">
@@ -708,7 +783,7 @@
           <summary>The overlay doesn't show up.</summary>
           <div class="ans">
             Run PokeMMO in windowed or borderless mode (not exclusive fullscreen), use the English
-            client, and start a wild battle — the overlay is hidden in the overworld and in trainer
+            client, and start a wild battle, the overlay is hidden in the overworld and in trainer
             battles.
           </div>
         </details>
@@ -734,7 +809,7 @@
           <summary>What is the Location Dex?</summary>
           <div class="ans">
             It reads your current location from the HUD and lists the Pokémon that spawn on that
-            route, minus the ones you've already caught — so you instantly see what you still need
+            route, minus the ones you've already caught, so you instantly see what you still need
             where you're standing.
           </div>
         </details>
@@ -795,11 +870,11 @@
         </details>
         <details>
           <summary>Multiple accounts?</summary>
-          <div class="ans">Yes — caught lists are kept separately per account.</div>
+          <div class="ans">Yes, caught lists are kept separately per account.</div>
         </details>
         <details>
           <summary>Is it heavy on my PC?</summary>
-          <div class="ans">No — it runs at about 5 frames per second during battles and 2 while walking.</div>
+          <div class="ans">No, it runs at about 5 frames per second during battles and 2 while walking.</div>
         </details>
         <details>
           <summary>What isn't supported yet?</summary>
@@ -821,7 +896,7 @@
     </footer>
 
     <script>
-      // Demo videos — drop your clips in docs/media/ and list them here (any number).
+      // Demo videos, drop your clips in docs/media/ and list them here (any number).
       const VIDEOS = ["media/demo-1.mp4", "media/demo-2.mp4", "media/demo-3.mp4"];
 
       const track = document.getElementById("track");
