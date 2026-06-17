@@ -200,6 +200,9 @@ def test_double_status_not_broken_by_horde_logic():
         ("red_health_no_status_cave.png", False),
         ("1920x1080_resolution.png", False),
         ("batle_minimized_chat.png", False),  # wild battle, chat minimized
+        # rain: diagonal streaks under the bar push edge density into the trainer
+        # range (0.0095), but they aren't compact icon blobs -> still wild.
+        ("rain_wild_encounter.png", False),
     ],
 )
 def test_trainer_battle_detection(name, is_trainer):

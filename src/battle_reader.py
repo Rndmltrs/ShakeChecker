@@ -192,6 +192,12 @@ class TrainerCalibration(BaseModel):
     dy1: int
     width_px: int
     edge_frac_min: float
+    min_blobs: int = 1
+    blob_min_side_px: int = 4
+    blob_area_min_px: int = 16
+    blob_area_max_px: int = 1500
+    blob_ar_min: float = 0.4
+    blob_ar_max: float = 2.6
 
 
 class LocationCalibration(BaseModel):
@@ -533,11 +539,18 @@ def is_battle_ui_present(frame_bgr: np.ndarray, cal: BattleUiCalibration) -> boo
 def is_trainer_battle(frame_bgr: np.ndarray, bar: BarReading, cal: TrainerCalibration) -> bool:
     """True if the enemy bar belongs to a TRAINER battle (nothing catchable).
 
-    A trainer's party indicator — six small icons (grey circles / Poke balls /
-    Pokemon icons) — sits in a fixed strip just below the enemy HP bar. Wild
-    battles have only the battle scene there. We detect the icons by edge density
-    in that strip: trainer fixtures measure well above zero, every wild fixture
-    is exactly zero. See [trainer] in calibration.toml."""
+    A trainer's party indicator — a lead mini-sprite plus a row of small party
+    balls — sits in a fixed strip just below the enemy HP bar. Wild battles have
+    only the battle scene there.
+
+    Two gates, both needed (rain/snow paint the otherwise-empty wild strip with
+    diagonal streaks, which the edge test alone read as a trainer):
+      1. edge density (Canny): a cheap reject of a calm, empty wild strip
+         (measures exactly 0.000 on every static wild fixture).
+      2. icon SHAPE: the party icons are compact blobs (aspect ~1, bounded area).
+         Weather streaks are long, thin, diagonal -> extreme aspect ratio -> they
+         fail this gate, so a rainy wild strip no longer reads as a trainer.
+    See [trainer] in calibration.toml."""
     y0, y1 = bar.y + cal.dy0, bar.y + cal.dy1
     x0, x1 = bar.x, bar.x + cal.width_px
     if y0 < 0 or x0 < 0 or y1 > frame_bgr.shape[0] or x1 > frame_bgr.shape[1]:
@@ -547,7 +560,21 @@ def is_trainer_battle(frame_bgr: np.ndarray, bar: BarReading, cal: TrainerCalibr
         return False
     gray = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150)
-    return float(np.mean(edges)) / 255.0 >= cal.edge_frac_min
+    if float(np.mean(edges)) / 255.0 < cal.edge_frac_min:
+        return False
+    # Count compact, icon-shaped edge blobs; ignore thin/long weather streaks.
+    edges = cv2.dilate(edges, np.ones((2, 2), np.uint8))
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    blobs = 0
+    for c in contours:
+        w, h = cv2.boundingRect(c)[2:]
+        if w < cal.blob_min_side_px or h < cal.blob_min_side_px:
+            continue
+        if not (cal.blob_area_min_px <= w * h <= cal.blob_area_max_px):
+            continue
+        if cal.blob_ar_min <= w / h <= cal.blob_ar_max:
+            blobs += 1
+    return blobs >= cal.min_blobs
 
 
 def read_caught_icon(frame_bgr: np.ndarray, bar: BarReading, cal: CaughtIconCalibration) -> bool:

@@ -154,12 +154,25 @@ upscale = 3
 # balls / Pokemon icons) — in a fixed strip just below the enemy HP bar, which
 # wild battles lack. Detect it by edge density (Canny) in that strip, relative to
 # the bar's (x, y). Measured: trainer fixtures (full_health_trainer_battle_*) ->
-# edge_frac ~0.01-0.03; EVERY wild fixture -> exactly 0.000, so the threshold has
-# a wide margin. width_px matches the bar inner width (218).
+# edge_frac ~0.01-0.03; EVERY *static* wild fixture -> exactly 0.000. But rain/snow
+# streaks paint that same strip with edges, so edge density ALONE false-flagged a
+# rainy wild as a trainer. So we also require the edges to form compact, icon-shaped
+# blobs (the party sprite + balls): weather is thin diagonal streaks (extreme aspect
+# ratio) and fails the shape gate. Trainer fixtures -> 1-2 blobs; wild -> 0.
+# width_px matches the bar inner width (218).
 dy0 = 20
 dy1 = 60
 width_px = 218
 edge_frac_min = 0.004
+# Shape gate: how many compact icon-blobs must the strip hold to be a trainer, and
+# what counts as "compact" (bounding box). Streaky weather makes long thin contours
+# (aspect far from 1) that are excluded by blob_ar_*.
+min_blobs = 1
+blob_min_side_px = 4
+blob_area_min_px = 16
+blob_area_max_px = 1500
+blob_ar_min = 0.4
+blob_ar_max = 2.6
 
 [battle_ui]
 # Authoritative "in a battle" signal: the battle screen has a uniform dark
