@@ -12,9 +12,28 @@ from overlay import (
     scale_for_window,
     status_badge,
     subheader_text,
+    visible_ball_order,
 )
 
 # --- pure helpers (no Qt) ---
+
+
+def test_visible_ball_order_sorts_descending():
+    names = ["Poke", "Great", "Ultra"]
+    probs = {"Poke": 0.2, "Great": 0.5, "Ultra": 0.35}
+    assert visible_ball_order(names, probs, set()) == ["Great", "Ultra", "Poke"]
+
+
+def test_visible_ball_order_drops_hidden_and_missing():
+    names = ["Poke", "Great", "Ultra", "Net"]
+    probs = {"Poke": 0.2, "Great": 0.5, "Ultra": 0.35}  # Net has no prob
+    assert visible_ball_order(names, probs, {"Great"}) == ["Ultra", "Poke"]
+
+
+def test_visible_ball_order_stable_on_ties():
+    names = ["Poke", "Great", "Ultra"]
+    probs = {"Poke": 0.4, "Great": 0.4, "Ultra": 0.4}
+    assert visible_ball_order(names, probs, set()) == ["Poke", "Great", "Ultra"]
 
 
 def test_prob_color_thresholds():
