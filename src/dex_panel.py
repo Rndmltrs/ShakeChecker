@@ -29,6 +29,7 @@ import win32gui
 from PyQt6.QtCore import QPointF, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QInputDialog,
@@ -154,6 +155,12 @@ class DexPanel(QWidget):
         self._profiles: QWidget | None = None  # profile management popup
         self._balls: QWidget | None = None  # ball-picker popup
         self._rows: list[dict] = []  # reused row-widget pool, grown as needed
+
+        # Close the header popups when ShakeChecker stops being the active app,
+        # i.e. the user clicked back into the game window.
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            app.applicationStateChanged.connect(self._on_app_state_changed)
 
         # callbacks the app wires in (no-ops until set)
         self.on_toggle_caught: Callable[[int], None] | None = None
@@ -318,12 +325,22 @@ class DexPanel(QWidget):
 
     def hide_panel(self) -> None:
         self._hover.stop()
-        for popup in (self._legend, self._profiles, self._balls):
-            if popup is not None:
-                popup.hide()
+        self._hide_popups()
         for r in self._rows:  # stop GIFs while hidden; they reload on re-show
             self._clear_row_sprite(r)
         self.hide()
+
+    def _hide_popups(self) -> None:
+        for popup in (self._legend, self._profiles, self._balls):
+            if popup is not None and popup.isVisible():
+                popup.hide()
+
+    def _on_app_state_changed(self, state: Qt.ApplicationState) -> None:
+        # Close the header popups when focus leaves ShakeChecker for the game.
+        # Our own modal dialogs (new/delete profile) keep the app Active, so this
+        # never fires while one is open.
+        if state == Qt.ApplicationState.ApplicationInactive:
+            self._hide_popups()
 
     def dock_to(self, left: int, top: int, width: int) -> None:
         """Dock below the HUD on the configured side (same spot as the catch

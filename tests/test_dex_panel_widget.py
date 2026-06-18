@@ -118,3 +118,18 @@ def test_ball_picker_set_all_invokes_callback(qt_app):
     p.on_set_all_balls = calls.append
     p._set_all_balls(False)
     assert calls == [False]
+
+
+def test_popup_closes_when_app_goes_inactive(qt_app):
+    from PyQt6.QtCore import Qt
+
+    p = DexPanel()
+    p.get_ball_state = lambda: ([("poke", "Poké Ball"), ("dusk", "Dusk Ball")], set())
+    p._open_balls()
+    assert p._balls is not None and p._balls.isVisible()
+    # staying active (e.g. our own profile dialog) must NOT close it
+    p._on_app_state_changed(Qt.ApplicationState.ApplicationActive)
+    assert p._balls.isVisible()
+    # clicking back into the game deactivates the app -> popup closes
+    p._on_app_state_changed(Qt.ApplicationState.ApplicationInactive)
+    assert not p._balls.isVisible()
