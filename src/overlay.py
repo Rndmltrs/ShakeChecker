@@ -67,8 +67,11 @@ def prob_color_hex(prob: float) -> str:
     return _GREEN
 
 
-def subheader_text(catch_rate: int, turn: int) -> str:
-    return f"Rate: {catch_rate}  ·  Turn {turn}"
+def subheader_text(catch_rate: int | None, turn: int) -> str:
+    # catch_rate is None for species with no known rate (e.g. roaming Latias/
+    # Latios/Mesprit/Cresselia): show it as a mystery "??".
+    rate = "??" if catch_rate is None else str(catch_rate)
+    return f"Rate: {rate}  ·  Turn {turn}"
 
 
 def scale_for_window(height_px: int) -> float:
@@ -114,6 +117,12 @@ def visible_ball_order(
     any without a probability; ties keep the original ball order (stable sort)."""
     shown = [n for n in ball_names if n not in hidden and probs.get(n) is not None]
     return sorted(shown, key=lambda n: probs[n], reverse=True)
+
+
+def unknown_ball_order(ball_names: list[str], hidden: set[str]) -> list[str]:
+    """Balls to show when the catch rate is unknown (no probabilities to sort by):
+    every non-hidden ball, in the original order."""
+    return [n for n in ball_names if n not in hidden]
 
 
 class Overlay(QWidget):
@@ -271,14 +280,18 @@ class Overlay(QWidget):
         self,
         dex_id: int,
         name: str,
-        catch_rate: int,
+        catch_rate: int | None,
         turn: int,
         probs: dict[str, float],
         level: int | None = None,
         status: str | None = None,
         hp_pct: float | None = None,
     ) -> None:
-        """Update the overlay for the current enemy and show it."""
+        """Update the overlay for the current enemy and show it.
+
+        `catch_rate` is None for species with no known rate (roaming Latias/Latios/
+        Mesprit/Cresselia): the rate and every ball percentage then show "??"."""
+        unknown = catch_rate is None
         self._set_sprite(dex_id)
         lvl = (
             f' <span style="font-size:{self._level_px}px; color:#9aa0aa;">Lv.{level}</span>'
@@ -290,6 +303,10 @@ class Overlay(QWidget):
         self._hp.setText(f"HP: {hp_pct:.0f}%" if hp_pct is not None else "")
         self._set_status(status)
         for ball, label in self._pct_labels.items():
+            if unknown:
+                label.setText("??")
+                label.setStyleSheet("color: #cccccc;")
+                continue
             prob = probs.get(ball)
             if prob is None:
                 label.setText("—")
@@ -297,7 +314,12 @@ class Overlay(QWidget):
             else:
                 label.setText(f"{100 * prob:5.1f}%")
                 label.setStyleSheet(f"color: {prob_color_hex(prob)};")
-        self._reorder(visible_ball_order(self._ball_names, probs, self._hidden_names))
+        order = (
+            unknown_ball_order(self._ball_names, self._hidden_names)
+            if unknown
+            else visible_ball_order(self._ball_names, probs, self._hidden_names)
+        )
+        self._reorder(order)
         self.show()
 
     def set_hidden_names(self, names: set[str]) -> None:

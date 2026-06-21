@@ -1436,7 +1436,7 @@
    "ICE",
    "FLYING"
   ],
-  "catch_rate": 5,
+  "catch_rate": 3,
   "obtainable": true
  },
  {
@@ -1446,7 +1446,7 @@
    "ELECTRIC",
    "FLYING"
   ],
-  "catch_rate": 5,
+  "catch_rate": 3,
   "obtainable": true
  },
  {
@@ -1456,7 +1456,7 @@
    "FIRE",
    "FLYING"
   ],
-  "catch_rate": 5,
+  "catch_rate": 3,
   "obtainable": true
  },
  {
@@ -2426,7 +2426,7 @@
    "ELECTRIC",
    "ELECTRIC"
   ],
-  "catch_rate": 5,
+  "catch_rate": 3,
   "obtainable": true
  },
  {
@@ -2436,7 +2436,7 @@
    "FIRE",
    "FIRE"
   ],
-  "catch_rate": 5,
+  "catch_rate": 3,
   "obtainable": true
  },
  {
@@ -2446,7 +2446,7 @@
    "WATER",
    "WATER"
   ],
-  "catch_rate": 5,
+  "catch_rate": 3,
   "obtainable": true
  },
  {

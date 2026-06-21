@@ -229,14 +229,21 @@ def _ways_note(ways: tuple[str, ...]) -> str:
     return f" ({'/'.join(ways)})" if ways else ""
 
 
-def format_line(name: str, hp_pct: float, status: str, probs: list[tuple[str, float]]) -> str:
-    balls = "  ".join(f"{ball} {100 * p:5.1f}%" for ball, p in probs)
+def format_line(
+    name: str, hp_pct: float, status: str, probs: list[tuple[str, float | None]]
+) -> str:
+    balls = "  ".join(f"{ball} {'??' if p is None else f'{100 * p:5.1f}%'}" for ball, p in probs)
     return f"{name:12.12s} HP {hp_pct:5.1f}% [{status}]  {balls}"
 
 
 def ball_probs(
-    hp_pct: float, base_rate: int, status_rate: float, balls: list[dict], ctx: BattleContext
-) -> list[tuple[str, float]]:
+    hp_pct: float, base_rate: int | None, status_rate: float, balls: list[dict], ctx: BattleContext
+) -> list[tuple[str, float | None]]:
+    """Catch probability per ball. base_rate is None for species with no known
+    catch rate (roaming Latias/Latios/Mesprit/Cresselia) -> every prob is None
+    (the overlay/console then show "??")."""
+    if base_rate is None:
+        return [(b["name"], None) for b in balls]
     return [
         (
             b["name"],
@@ -697,7 +704,8 @@ class LiveLoop:
             sp = self.name_reader.read(frame, bar)
             if sp is not None:
                 self.cached = sp
-                log.info(f"identified: {sp['name']} (catch rate {sp['catch_rate']})")
+                rate_str = "??" if sp["catch_rate"] is None else sp["catch_rate"]
+                log.info(f"identified: {sp['name']} (catch rate {rate_str})")
         elif self.cached.get("level") is None and self.name_reader is not None:
             # species known but the level OCR missed it that frame; keep trying
             # (a clearer later frame usually yields it). Drives the Nest Ball.
@@ -738,12 +746,15 @@ class LiveLoop:
             )
             line = f"[{turn_note}] " + format_line(self.cached["name"], hp_pct, status, probs)
             self.overlay.apply_scale(scale_for_window(rect.height))
+            # Pass only known probabilities to the overlay; for an unknown rate
+            # this is empty and show_battle renders "??" from catch_rate=None.
+            overlay_probs = {name: p for name, p in probs if p is not None}
             self.overlay.show_battle(
                 self.cached.get("id", -1),
                 self.cached["name"],
                 self.cached["catch_rate"],
                 self.turns.turns_completed + 1,
-                dict(probs),
+                overlay_probs,
                 level=self.cached.get("level"),
                 status=status,
                 hp_pct=hp_pct,

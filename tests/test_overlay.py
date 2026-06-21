@@ -12,6 +12,7 @@ from overlay import (
     scale_for_window,
     status_badge,
     subheader_text,
+    unknown_ball_order,
     visible_ball_order,
 )
 
@@ -47,6 +48,16 @@ def test_prob_color_thresholds():
 
 def test_subheader_text():
     assert subheader_text(75, 2) == "Rate: 75  ·  Turn 2"
+
+
+def test_subheader_text_unknown_rate():
+    assert subheader_text(None, 2) == "Rate: ??  ·  Turn 2"
+
+
+def test_unknown_ball_order_keeps_all_non_hidden_in_order():
+    names = ["Poke", "Great", "Ultra", "Net"]
+    assert unknown_ball_order(names, set()) == names
+    assert unknown_ball_order(names, {"Great"}) == ["Poke", "Ultra", "Net"]
 
 
 def test_scale_for_window_caps_at_one_and_floors():
@@ -163,6 +174,18 @@ def test_missing_ball_shows_dash(qt_app):
     ov = Overlay(BALLS)
     ov.show_battle(1, "Bulbasaur", 45, 1, {"Poké Ball": 0.1})  # no Great/Quick
     assert ov._pct_labels["Great Ball"].text() == "—"
+
+
+def test_unknown_catch_rate_shows_question_marks(qt_app):
+    # roaming Latias/Latios/Mesprit/Cresselia: no known rate -> "??" everywhere,
+    # all (non-hidden) balls still listed (not dropped as they would be for None probs).
+    ov = Overlay(BALLS)
+    ov.show_battle(380, "Latias", None, 1, {})
+    assert ov._sub.text() == "Rate: ??  ·  Turn 1"
+    for ball in BALLS:
+        assert ov._pct_labels[ball].text() == "??"
+        assert not ov._ball_rows[ball].isHidden()
+    assert ov._last_order == BALLS  # natural order, nothing sorted/dropped
 
 
 def test_animated_species_gets_a_running_movie(qt_app):
