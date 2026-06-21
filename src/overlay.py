@@ -18,6 +18,7 @@ Run standalone to preview the look without the game:
 
 from __future__ import annotations
 
+import win32api
 from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QFont, QGuiApplication, QMovie
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
@@ -97,16 +98,38 @@ def status_badge(status: str | None) -> tuple[str, str] | None:
 def phys_to_logical(px: int, py: int) -> tuple[int, int]:
     """Convert a physical-pixel screen point (from win32) to Qt's logical-pixel
     coordinates, which move() expects. They differ when Windows display scaling
-    is not 100%; without this the overlay lands on the wrong monitor. Uses the
-    target screen's device pixel ratio (refined from the primary's first guess),
-    which is exact for uniform scaling and close for mixed-DPI setups."""
-    primary = QGuiApplication.primaryScreen()
-    dpr = primary.devicePixelRatio() if primary else 1.0
-    lx, ly = px / dpr, py / dpr
-    screen = QGuiApplication.screenAt(QPoint(round(lx), round(ly)))
-    if screen is not None and screen.devicePixelRatio() != dpr:
-        dpr = screen.devicePixelRatio()
-        lx, ly = px / dpr, py / dpr
+    is not 100%; without this the overlay lands on the wrong monitor.
+    
+    Queries the Windows OS directly via win32api.EnumDisplayMonitors() to find the 
+    absolute physical pixel bounds of all active monitors. Sorts the physical monitors 
+    from left-to-right and maps them directly to PyQt6's virtual QScreen list.
+    Calculates the exact physical offset from the monitor's origin and divides by 
+    the specific devicePixelRatio() of that screen to perfectly map mixed-DPI setups."""
+    screens = QGuiApplication.screens()
+    if not screens:
+        return px, py
+
+    monitors = win32api.EnumDisplayMonitors()
+    monitors.sort(key=lambda m: m[2][0])
+    screens_sorted = sorted(screens, key=lambda s: s.geometry().x())
+
+    target_idx = 0
+    for i, m in enumerate(monitors):
+        left, top, right, bottom = m[2]
+        if left <= px < right and top <= py < bottom:
+            target_idx = i
+            break
+
+    if target_idx >= len(screens_sorted):
+        target_idx = 0
+
+    phys_left, phys_top, _, _ = monitors[target_idx][2]
+    qt_screen = screens_sorted[target_idx]
+    dpr = qt_screen.devicePixelRatio()
+
+    lx = qt_screen.geometry().x() + (px - phys_left) / dpr
+    ly = qt_screen.geometry().y() + (py - phys_top) / dpr
+
     return round(lx), round(ly)
 
 
