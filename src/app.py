@@ -945,7 +945,28 @@ def run(
     sys.exit(code)
 
 
+def restrict_onnx_threads() -> None:
+    """Monkey-patch onnxruntime.SessionOptions to strictly use 1 thread.
+    The bundled rapidocr_onnxruntime v1.2.3 hardcodes its own SessionOptions,
+    defaulting to all cores. Run in a tight loop, this thrashes the CPU."""
+    try:
+        import onnxruntime
+    except ImportError:
+        return
+
+    original_init = onnxruntime.SessionOptions.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.intra_op_num_threads = 1
+        self.inter_op_num_threads = 1
+
+    onnxruntime.SessionOptions.__init__ = patched_init
+
+
 def main() -> None:
+    restrict_onnx_threads()
+
     # Ball names contain non-ASCII (Poké Ball); force UTF-8 on the Windows console.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8")
