@@ -379,6 +379,9 @@ class LiveLoop:
         self.battle_text = BattleTextReader(cal.battle_text, TEMPLATES_DIR)
         self.chat = AsyncChatReader(cal.chat)  # background turn-OCR (correction only)
         self.capture = WindowCapture()
+        
+        from concurrent.futures import ThreadPoolExecutor
+        self.pool = ThreadPoolExecutor(max_workers=1)
 
         self.state = AppState.WAITING
         self.hwnd: int | None = None
@@ -444,6 +447,15 @@ class LiveLoop:
             interval_s = self._frame_interval()
         QTimer.singleShot(int(interval_s * 1000), self.step)
 
+    def _run_heavy(self, func, *args, **kwargs):
+        from PyQt6.QtWidgets import QApplication
+        import time
+        future = self.pool.submit(func, *args, **kwargs)
+        while not future.done():
+            QApplication.processEvents()
+            time.sleep(0.005)
+        return future.result()
+
     def _frame_interval(self) -> float:
         return BATTLE_FRAME_S if self.state is AppState.BATTLE else IDLE_FRAME_S
 
@@ -474,7 +486,7 @@ class LiveLoop:
         now = time.monotonic()
         # Pass the horde hint so a horde narrowed to ONE bar still reads its status
         # at the horde (right-side) badge offset; full hordes auto-detect by spread.
-        reading = read_battle(frame, self.cal, horde=self._was_horde)
+        reading = self._run_heavy(read_battle, frame, self.cal, horde=self._was_horde)
         if reading.is_horde:
             self._was_horde = True
         # Membership uses battle-SPECIFIC signals only: the enemy HP bar plus the
@@ -483,7 +495,7 @@ class LiveLoop:
         # attack animation the bar vanishes but the "X used Y!" text shows; brief
         # gaps are covered by the end grace. The panel (ui_present) only tunes the
         # grace; it never extends in_battle, so a dark cave still ends the battle.
-        bt = self.battle_text.read(frame)
+        bt = self._run_heavy(self.battle_text.read, frame)
         in_battle = is_in_battle(reading.state, bt)
         ui_present = is_battle_ui_present(frame, self.cal.battle_ui)
         grace = battle_end_grace(
@@ -533,7 +545,7 @@ class LiveLoop:
                 if self._last_loc_mask is None or not np.array_equal(mask, self._last_loc_mask):
                     # Pixels changed — run the heavy OCR and update the raw cache.
                     self._last_loc_mask = mask
-                    self._loc_ocr_raw = location_reader.read_location(frame, self.cal.location)
+                    self._loc_ocr_raw = self._run_heavy(location_reader.read_location, frame, self.cal.location)
                 
                 view = self._update_dex(self._loc_ocr_raw)
                 action, self._loc_miss_streak = dex_panel_action(
@@ -583,7 +595,7 @@ class LiveLoop:
         # must NOT drop. Reading once at battle start captures exactly that. Retry
         # until a non-empty name is read (the first battle frame can be mid-transition).
         if not self._loc_read:
-            loc = read_location(frame, self.cal.location)
+            loc = self._run_heavy(read_location, frame, self.cal.location)
             if loc:
                 cave = is_cave_location(loc)
                 night = self._is_night(frame)  # Dusk Ball also boosts at night (locked here)

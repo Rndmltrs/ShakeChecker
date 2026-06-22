@@ -51,7 +51,7 @@ from game_time import season_name
 from overlay import DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, phys_to_logical
 from sprite_loader import SpriteLoader
 
-HOVER_POLL_MS = 120  # how often to check if the cursor is over the panel
+HOVER_POLL_MS = 40  # how often to check if the cursor is over the panel
 ANIMATE_SPRITES = True  # Toggle animated GIFs for the Dex Panel (False saves CPU)
 
 # WoW-style rarity -> name colour (user's scheme). Very Common/Horde fall back to
@@ -190,6 +190,7 @@ class DexPanel(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool  # click-through handled via Win32 (hover toggle)
+            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -386,10 +387,13 @@ class DexPanel(QWidget):
     def _check_hover(self) -> None:
         if not self.isVisible():
             return
-        over = self.frameGeometry().contains(QCursor.pos())
+        # Add a 30px buffer around the panel so it turns solid *before* the mouse
+        # reaches the actual buttons, reducing the chance of clicks falling through
+        # if the main thread is temporarily busy doing OCR.
+        over = self.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
         for popup in (self._legend, self._profiles, self._balls):
             if popup is not None and popup.isVisible():
-                over = over or popup.frameGeometry().contains(QCursor.pos())
+                over = over or popup.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
         self._apply_click_through(not over)
 
     def _apply_click_through(self, on: bool) -> None:
