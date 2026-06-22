@@ -30,6 +30,7 @@ from PyQt6.QtCore import QPointF, QSize, Qt, QTimer
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QInputDialog,
@@ -176,6 +177,12 @@ class DexPanel(QWidget):
         # dex mode: read/flip whether caught species stay in the list (issue #16)
         self.get_keep_caught: Callable[[], bool] | None = None
         self.on_toggle_keep_caught: Callable[[], None] | None = None
+        # region override
+        self.get_current_region: Callable[[], str | None] | None = None
+        self.on_override_region: Callable[[str | None], None] | None = None
+        # panel scale override
+        self.get_panel_scale: Callable[[], float | None] | None = None
+        self.on_set_panel_scale: Callable[[float | None], None] | None = None
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -320,7 +327,10 @@ class DexPanel(QWidget):
             r0 = self._rows[0]
             self._clear_row_sprite(r0)
             r0["w"].setVisible(True)
-            r0["name"].setText('<span style="color:#9aa0aa;">all caught here!</span>')
+            if not view.entries:
+                r0["name"].setText('<span style="color:#9aa0aa;">no encounters here</span>')
+            else:
+                r0["name"].setText('<span style="color:#9aa0aa;">all caught here!</span>')
             r0["way"].setText("")
         self._fit_list_height()
         # Recompute the outer layouts synchronously too, so the window shrinks to
@@ -462,7 +472,94 @@ class DexPanel(QWidget):
         toggle.setStyleSheet(f"QPushButton {{ text-align: left; color: {shade}; }}")
         toggle.clicked.connect(self._toggle_keep_caught)
         box.addWidget(toggle)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("color: rgba(255,255,255,40);")
+        box.addWidget(sep2)
+        reg_head = QLabel("Region Override")
+        reg_head.setFont(self._font(12, bold=True))
+        reg_head.setStyleSheet("color: #ffffff;")
+        box.addWidget(reg_head)
+        
+        combo = QComboBox()
+        combo.addItems(["Auto", "Kanto", "Johto", "Hoenn", "Sinnoh", "Unova"])
+        combo.setStyleSheet(
+            "QComboBox {"
+            " color: #eeeeee; background: rgba(255,255,255,20);"
+            " border: 1px solid rgba(255,255,255,40); border-radius: 4px; padding: 2px 4px;"
+            "}"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView {"
+            " color: #eeeeee; background: rgba(18,18,20,255);"
+            " selection-background-color: rgba(255,255,255,40);"
+            "}"
+        )
+        combo.setFont(self._font(11))
+        combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        curr = self.get_current_region() if self.get_current_region else None
+        if curr:
+            idx = combo.findText(curr.title())
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        else:
+            combo.setCurrentIndex(0)
+            
+        combo.currentTextChanged.connect(self._region_changed)
+        box.addWidget(combo)
+
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.HLine)
+        sep3.setStyleSheet("color: rgba(255,255,255,40);")
+        box.addWidget(sep3)
+        scale_head = QLabel("Panel Scale")
+        scale_head.setFont(self._font(12, bold=True))
+        scale_head.setStyleSheet("color: #ffffff;")
+        box.addWidget(scale_head)
+
+        scale_combo = QComboBox()
+        scale_combo.addItems(["Auto", "0.5x", "1.0x", "1.5x", "2.0x", "2.5x", "3.0x"])
+        scale_combo.setStyleSheet(
+            "QComboBox {"
+            " color: #eeeeee; background: rgba(255,255,255,20);"
+            " border: 1px solid rgba(255,255,255,40); border-radius: 4px; padding: 2px 4px;"
+            "}"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView {"
+            " color: #eeeeee; background: rgba(18,18,20,255);"
+            " selection-background-color: rgba(255,255,255,40);"
+            "}"
+        )
+        scale_combo.setFont(self._font(11))
+        scale_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        curr_scale = self.get_panel_scale() if self.get_panel_scale else None
+        if curr_scale:
+            idx = scale_combo.findText(f"{curr_scale}x")
+            if idx >= 0:
+                scale_combo.setCurrentIndex(idx)
+            else:
+                scale_combo.setCurrentIndex(0)
+        else:
+            scale_combo.setCurrentIndex(0)
+            
+        scale_combo.currentTextChanged.connect(self._scale_changed)
+        box.addWidget(scale_combo)
+
         return w
+
+    def _region_changed(self, text: str) -> None:
+        if self.on_override_region is not None:
+            self.on_override_region(text if text != "Auto" else None)
+
+    def _scale_changed(self, text: str) -> None:
+        if self.on_set_panel_scale is not None:
+            if text == "Auto":
+                self.on_set_panel_scale(None)
+            else:
+                try:
+                    self.on_set_panel_scale(float(text.replace("x", "")))
+                except ValueError:
+                    self.on_set_panel_scale(None)
 
     def _toggle_keep_caught(self) -> None:
         if self.on_toggle_keep_caught is not None:

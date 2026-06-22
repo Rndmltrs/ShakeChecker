@@ -288,4 +288,4 @@ sat_min = 120
 val_min = 110
 # Threshold well below 61 (present) and above 0 (absent); tolerates a smaller
 # ball at lower window resolutions.
-min_red_px = 15
+min_red_px = 10

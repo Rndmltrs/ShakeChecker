@@ -416,6 +416,10 @@ class LiveLoop:
             self.dex_panel.get_ball_state = self._ball_state
             self.dex_panel.get_keep_caught = lambda: self.settings.keep_caught
             self.dex_panel.on_toggle_keep_caught = self._toggle_keep_caught
+            self.dex_panel.get_current_region = lambda: self.dex.region if self.dex else None
+            self.dex_panel.on_override_region = self._dex_override_region
+            self.dex_panel.get_panel_scale = lambda: self.settings.panel_scale
+            self.dex_panel.on_set_panel_scale = self._set_panel_scale
 
     def start(self) -> None:
         log.info(f"ShakeChecker v{paths.APP_VERSION}")
@@ -509,7 +513,7 @@ class LiveLoop:
             if self.dex_panel is not None and self.dex is not None and self._last_hud:
                 view = self.dex.on_location(self._last_hud)
                 if view is not None:
-                    self.dex_panel.apply_scale(scale_for_window(client_rect.height))
+                    self.dex_panel.apply_scale(self.settings.panel_scale or scale_for_window(client_rect.height))
                     self.dex_panel.show_here(view)
                     self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
 
@@ -537,7 +541,7 @@ class LiveLoop:
                 )
                 if self.dex_panel is not None:
                     if view is not None:  # matched -> show (action == "show")
-                        self.dex_panel.apply_scale(scale_for_window(client_rect.height))
+                        self.dex_panel.apply_scale(self.settings.panel_scale or scale_for_window(client_rect.height))
                         self.dex_panel.show_here(view)
                         self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
                     elif action == "hide":  # several misses in a row -> truly left the area
@@ -812,6 +816,33 @@ class LiveLoop:
         if view is not None:
             self.dex_panel.show_here(view)
 
+    def _dex_override_region(self, region: str | None) -> None:
+        if self.dex is None:
+            return
+        self.dex.seed_region(region)
+        log.info(f"dex: region override set to: {region if region else 'Auto'}")
+        # Force a refresh of the dex panel to reflect the new region
+        if self._loc_ocr_raw:
+            view = self._update_dex(self._loc_ocr_raw)
+            if self.dex_panel is not None and self.hwnd is not None:
+                client_rect = get_client_rect(self.hwnd)
+                if view is not None and client_rect is not None:
+                    self.dex_panel.apply_scale(self.settings.panel_scale or scale_for_window(client_rect.height))
+                    self.dex_panel.show_here(view)
+                    self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+                elif view is None:
+                    self.dex_panel.hide_panel()
+
+    def _set_panel_scale(self, scale: float | None) -> None:
+        self.settings.set_panel_scale(scale)
+        log.info(f"dex: panel scale override set to {scale if scale else 'Auto'}")
+        if self.dex_panel is not None and self.hwnd is not None:
+            client_rect = get_client_rect(self.hwnd)
+            if client_rect is not None:
+                self.dex_panel.apply_scale(self.settings.panel_scale or scale_for_window(client_rect.height))
+                self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+        self._refresh_dex_panel()
+
     def _dex_toggle_caught(self, dex_id: int) -> None:
         if self.dex is None:
             return
@@ -921,6 +952,18 @@ def run(
             win32con.MB_OK | win32con.MB_ICONINFORMATION,
         )
         return
+        
+    # Suppress harmless "SetProcessDpiAwarenessContext() failed" warnings.
+    # We manually set DPI awareness for accurate screen capture coordinates, so PyQt's later attempt fails.
+    from PyQt6.QtCore import qInstallMessageHandler
+    def qt_message_handler(mode, context, message):
+        if "SetProcessDpiAwarenessContext" in message or "DPI_AWARENESS_CONTEXT" in message:
+            return
+        # Pass through other messages
+        import sys
+        print(message, file=sys.stderr)
+    qInstallMessageHandler(qt_message_handler)
+    
     app = QApplication(sys.argv[:1])
     # The overlay and dex panels hide themselves between battles, so don't quit when
     # no window is visible -- the app lives in the tray and is quit from there.

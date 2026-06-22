@@ -19,28 +19,37 @@ DEFAULT_KEEP_CAUGHT = True
 
 
 class Settings:
-    def __init__(self, path: Path, hidden_balls: set[str], keep_caught: bool) -> None:
+    def __init__(self, path: Path, hidden_balls: set[str], keep_caught: bool, panel_scale: float | None = None) -> None:
         self.path = path
         self.hidden_balls = hidden_balls
         self.keep_caught = keep_caught
+        self.panel_scale = panel_scale
 
     @classmethod
     def load(cls, userdata_dir: Path | str) -> Settings:
         path = Path(userdata_dir) / "settings.json"
         hidden: set[str] = set()
         keep_caught = DEFAULT_KEEP_CAUGHT
+        panel_scale: float | None = None
         if path.exists():
             try:
                 raw = json.loads(path.read_text("utf-8"))
                 hidden = {str(b) for b in raw.get("hidden_balls", [])}
                 keep_caught = bool(raw.get("keep_caught", DEFAULT_KEEP_CAUGHT))
-            except (json.JSONDecodeError, OSError):
+                ps = raw.get("panel_scale")
+                if ps is not None:
+                    panel_scale = float(ps)
+            except (json.JSONDecodeError, OSError, ValueError):
                 pass  # corrupt/unreadable -> fall back to defaults
-        return cls(path, hidden, keep_caught)
+        return cls(path, hidden, keep_caught, panel_scale)
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"hidden_balls": sorted(self.hidden_balls), "keep_caught": self.keep_caught}
+        payload = {
+            "hidden_balls": sorted(self.hidden_balls),
+            "keep_caught": self.keep_caught,
+            "panel_scale": self.panel_scale,
+        }
         self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), "utf-8")
 
     def is_ball_visible(self, ball_id: str) -> bool:
@@ -68,3 +77,8 @@ class Settings:
         self.keep_caught = not self.keep_caught
         self.save()
         return self.keep_caught
+
+    def set_panel_scale(self, scale: float | None) -> None:
+        """Set the manual dex panel scale override and persist."""
+        self.panel_scale = scale
+        self.save()
