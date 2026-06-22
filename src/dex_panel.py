@@ -118,6 +118,21 @@ def _icon_pixmap(kind: str, size: int, color: str) -> QPixmap:
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(c)
         p.drawEllipse(QPointF(cx, cy), size * 0.14, size * 0.14)  # centre button
+    elif kind == "swords":
+        p.setPen(QPen(c, size * 0.1, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(QPointF(cx - size * 0.3, cy + size * 0.3), QPointF(cx + size * 0.3, cy - size * 0.3))
+        p.drawLine(QPointF(cx - size * 0.25, cy + size * 0.1), QPointF(cx - size * 0.1, cy + size * 0.25))
+        p.drawLine(QPointF(cx + size * 0.3, cy + size * 0.3), QPointF(cx - size * 0.3, cy - size * 0.3))
+        p.drawLine(QPointF(cx + size * 0.25, cy + size * 0.1), QPointF(cx + size * 0.1, cy + size * 0.25))
+    elif kind == "book":
+        p.setPen(QPen(c, size * 0.1, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(QPointF(cx - size * 0.35, cy - size * 0.2), QPointF(cx, cy - size * 0.1))
+        p.drawLine(QPointF(cx - size * 0.35, cy + size * 0.2), QPointF(cx, cy + size * 0.3))
+        p.drawLine(QPointF(cx - size * 0.35, cy - size * 0.2), QPointF(cx - size * 0.35, cy + size * 0.2))
+        p.drawLine(QPointF(cx + size * 0.35, cy - size * 0.2), QPointF(cx, cy - size * 0.1))
+        p.drawLine(QPointF(cx + size * 0.35, cy + size * 0.2), QPointF(cx, cy + size * 0.3))
+        p.drawLine(QPointF(cx + size * 0.35, cy - size * 0.2), QPointF(cx + size * 0.35, cy + size * 0.2))
+        p.drawLine(QPointF(cx, cy - size * 0.1), QPointF(cx, cy + size * 0.3))
     else:  # info
         p.setPen(QPen(c, size * 0.10))
         p.drawEllipse(QPointF(cx, cy), size * 0.42, size * 0.42)
@@ -159,6 +174,7 @@ class DexPanel(QWidget):
         self._profiles: QWidget | None = None  # profile management popup
         self._balls: QWidget | None = None  # ball-picker popup
         self._rows: list[dict] = []  # reused row-widget pool, grown as needed
+        self.on_mode_toggle = None
 
         # Close the header popups when ShakeChecker stops being the active app,
         # i.e. the user clicked back into the game window.
@@ -217,9 +233,12 @@ class DexPanel(QWidget):
         self._root = root  # kept so show_here can force a synchronous relayout
         self._col = QVBoxLayout(panel)
 
-        # top icon bar: stretch + profile (gear) + info. Icons are drawn (not OS
-        # emoji) in apply_scale so they match the panel's colour/style.
+        # top icon bar: mode (swords) + stretch + profile (gear) + info.
         self._bar = QHBoxLayout()
+        self._mode_btn = QPushButton()
+        self._mode_btn.setToolTip("Switch to Battle Mode")
+        self._mode_btn.clicked.connect(lambda: self.on_mode_toggle() if self.on_mode_toggle else None)
+        self._bar.addWidget(self._mode_btn)
         self._bar.addStretch(1)
         self._profile_btn = QPushButton()
         self._profile_btn.setToolTip("Profiles: create / load / delete")
@@ -230,7 +249,7 @@ class DexPanel(QWidget):
         self._info_btn = QPushButton()
         self._info_btn.setToolTip("Rarity colour legend")
         self._info_btn.clicked.connect(self._toggle_legend)
-        for b in (self._profile_btn, self._balls_btn, self._info_btn):
+        for b in (self._mode_btn, self._profile_btn, self._balls_btn, self._info_btn):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
         self._bar.addWidget(self._profile_btn)
         self._bar.addWidget(self._balls_btn)
@@ -287,6 +306,7 @@ class DexPanel(QWidget):
         self._subtitle.setFont(self._font(self._px(BASE_SUB_PX)))
         isz = self._px(BASE_ICON_PX)
         for btn, kind in (
+            (self._mode_btn, "swords"),
             (self._profile_btn, "gear"),
             (self._balls_btn, "ball"),
             (self._info_btn, "info"),

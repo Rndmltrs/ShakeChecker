@@ -397,13 +397,23 @@ class LiveLoop:
         # interruption. Spans battles (NOT reset in _enter_battle); see _on_catch.
         self._chain = CatchChain()
         self.dusk_active = False  # cave/night -> Dusk Ball boost
+        self.mode_override: str = "auto"
+        if self.dex_panel is not None:
+            self.dex_panel.on_mode_toggle = self._on_mode_toggle
+        self.overlay.on_mode_toggle = self._on_mode_toggle
+        self._last_loc: LocationView | None = None
         self._loc_read = False  # location OCR'd this battle yet
+        self._loc_ocr_raw: dict | None = None  # the literal OCR result, cached
+        self._last_loc_mask: np.ndarray | None = None  # the location banner's mask image
+        self._loc_miss_streak = 0  # frames without location text
+        self._loc_future = None  # background Location OCR task
+        self._name_future = None  # background Name OCR task
+
         self._is_trainer = False  # trainer battle -> overlay hidden
         self._trainer_decided = False  # trainer vs wild settled this battle
         self._ot_checked = False  # enemy's OT-caught icon checked this battle
         self._was_horde = False  # read_battle horde hint (read every tick, so init here)
         self._last_loc_check = 0.0  # last IDLE location OCR (throttle)
-        self._loc_miss_streak = 0  # consecutive unmatched location reads (debounce hide)
         self._dex_log = ""  # last printed dex panel text (console dedup)
         self._last_hud = ""  # last resolved HUD location (drives dex panel refresh)
         self._loc_ocr_raw = ""  # last raw OCR text (tracks what the screen actually shows)
@@ -447,17 +457,17 @@ class LiveLoop:
             interval_s = self._frame_interval()
         QTimer.singleShot(int(interval_s * 1000), self.step)
 
-    def _run_heavy(self, func, *args, **kwargs):
-        from PyQt6.QtWidgets import QApplication
-        import time
-        future = self.pool.submit(func, *args, **kwargs)
-        while not future.done():
-            QApplication.processEvents()
-            time.sleep(0.005)
-        return future.result()
-
     def _frame_interval(self) -> float:
         return BATTLE_FRAME_S if self.state is AppState.BATTLE else IDLE_FRAME_S
+
+    def _on_mode_toggle(self) -> None:
+        if self.mode_override == "auto":
+            self.mode_override = "dex" if self.state == AppState.BATTLE else "battle"
+        elif self.mode_override == "dex":
+            self.mode_override = "battle"
+        else:
+            self.mode_override = "dex"
+        log.info(f"manual mode override: {self.mode_override}")
 
     def _set_owner(self, widget, owner_hwnd: int) -> None:
         if widget is not None:
@@ -473,6 +483,13 @@ class LiveLoop:
                     handle.setTransientParent(foreign)
 
     def _tick(self) -> float:
+        # Reset manual override if the app state changes naturally
+        if self.state != getattr(self, "_last_state", None):
+            if getattr(self, "_last_state", None) is not None and self.mode_override != "auto":
+                log.info("state changed -> resetting mode to auto")
+            self.mode_override = "auto"
+            self._last_state = self.state
+
         if self.state is AppState.WAITING:
             self.hwnd = find_pokemmo_hwnd()
             if self.hwnd is None:
@@ -503,7 +520,7 @@ class LiveLoop:
         now = time.monotonic()
         # Pass the horde hint so a horde narrowed to ONE bar still reads its status
         # at the horde (right-side) badge offset; full hordes auto-detect by spread.
-        reading = self._run_heavy(read_battle, frame, self.cal, horde=self._was_horde)
+        reading = read_battle(frame, self.cal, horde=self._was_horde)
         if reading.is_horde:
             self._was_horde = True
         # Membership uses battle-SPECIFIC signals only: the enemy HP bar plus the
@@ -512,7 +529,7 @@ class LiveLoop:
         # attack animation the bar vanishes but the "X used Y!" text shows; brief
         # gaps are covered by the end grace. The panel (ui_present) only tunes the
         # grace; it never extends in_battle, so a dark cave still ends the battle.
-        bt = self._run_heavy(self.battle_text.read, frame)
+        bt = self.battle_text.read(frame)
         in_battle = is_in_battle(reading.state, bt)
         ui_present = is_battle_ui_present(frame, self.cal.battle_ui)
         grace = battle_end_grace(
@@ -560,9 +577,14 @@ class LiveLoop:
             mask = location_reader.extract_location_mask(frame, self.cal.location)
             if mask is not None:
                 if self._last_loc_mask is None or not np.array_equal(mask, self._last_loc_mask):
-                    # Pixels changed — run the heavy OCR and update the raw cache.
-                    self._last_loc_mask = mask
-                    self._loc_ocr_raw = self._run_heavy(location_reader.read_location, frame, self.cal.location)
+                    if not getattr(self, "_loc_future", None):
+                        # Dispatch async OCR and record the mask so we don't dispatch it again
+                        self._loc_future = self.pool.submit(location_reader.read_location, frame.copy(), self.cal.location)
+                        self._last_loc_mask = mask
+                
+                if getattr(self, "_loc_future", None) and self._loc_future.done():
+                    self._loc_ocr_raw = self._loc_future.result()
+                    self._loc_future = None
                 
                 view = self._update_dex(self._loc_ocr_raw)
                 action, self._loc_miss_streak = dex_panel_action(
@@ -577,11 +599,44 @@ class LiveLoop:
                         self.dex_panel.hide_panel()
                     # "keep": a transient miss -> leave the last good panel on screen
 
+        # Apply manual mode override UI forcing
+        if self.mode_override == "dex":
+            if self.overlay.isVisible():
+                self.overlay.hide()
+            if self.state == AppState.BATTLE and self.dex_panel is not None and not self.dex_panel.isVisible():
+                self.dex_panel.show()
+        elif self.mode_override == "battle":
+            if self.dex_panel is not None and self.dex_panel.isVisible():
+                self.dex_panel.hide()
+            if self.state == AppState.IDLE and not self.overlay.isVisible():
+                self.overlay.apply_scale(self.settings.panel_scale or scale_for_window(client_rect.height))
+                self.overlay.show_battle(
+                    dex_id=0,
+                    name="—",
+                    catch_rate=None,
+                    turn=0,
+                    probs={},
+                    is_empty=True,
+                )
+                if self.dex_panel is not None:
+                    # Keep the exact same size as the dex panel
+                    self.overlay.setFixedHeight(self.dex_panel.height())
+
+        # Sync positions so toggling doesn't cause panels to jump
+        if self.overlay.isVisible() and getattr(self.overlay, "_last_pos", None) is not None:
+            if self.dex_panel is not None:
+                self.dex_panel._last_pos = self.overlay._last_pos
+                self.dex_panel.move(*self.overlay._last_pos)
+        elif self.dex_panel is not None and self.dex_panel.isVisible() and getattr(self.dex_panel, "_last_pos", None) is not None:
+            self.overlay._last_pos = self.dex_panel._last_pos
+            self.overlay.move(*self.dex_panel._last_pos)
+
         return self._frame_interval()
 
     def _enter_battle(self) -> None:
         self.state = AppState.BATTLE
         self.cached = None  # new battle: re-identify the species
+        self._name_future = None
         self.last_line = ""
         self.turns.reset()
         self.hp.reset()
@@ -714,8 +769,8 @@ class LiveLoop:
             # Negative test: only show the catch overlay once we're SURE it's a
             # wild battle (trainer detection has run and said "not trainer"). This
             # avoids briefly flashing the overlay before a trainer is confirmed.
-            if self._trainer_decided and not self._is_trainer:
-                self._update_single(frame, reading.bars[0], rect)
+            if self._trainer_decided:
+                self._update_single(frame, reading.bars[0], rect, is_trainer=self._is_trainer)
             else:
                 self.overlay.hide_battle()
         elif reading.state is BattleState.MULTI and self.last_line != "multi":
@@ -740,26 +795,51 @@ class LiveLoop:
         species)."""
         return self._chain.length_for(enemy.get("id") if enemy else None)
 
-    def _update_single(self, frame, bar, rect) -> None:
+    def _update_single(self, frame, bar, rect, is_trainer: bool = False) -> None:
         hp_pct = self.hp.update(bar.hp_pct)  # wait for the bar to settle
         # debounce the status so the catch animation's blue ball flash can't
         # briefly flip it (e.g. PSN -> FRZ); a real change still gets through.
         status = self.status_override or self.status.update(bar.status.value)
+        
+        if is_trainer:
+            if self.mode_override != "dex":
+                self.overlay.apply_scale(scale_for_window(rect.height))
+                self.overlay.show_battle(
+                    dex_id=0,
+                    name="Trainer's Pokémon",
+                    catch_rate=None,
+                    turn=self.turns.turns_completed + 1,
+                    probs={},
+                    level=None,
+                    status=status if status != "none" else None,
+                    hp_pct=hp_pct,
+                    alpha=False,
+                    is_trainer=True,
+                )
+            return
+
         if self.species_override is not None:
             self.cached = self.species_override
         elif self.cached is None:
             assert self.name_reader is not None
-            sp = self.name_reader.read(frame, bar)
-            if sp is not None:
-                self.cached = sp
-                rate_str = "??" if sp["catch_rate"] is None else sp["catch_rate"]
-                log.info(f"identified: {sp['name']} (catch rate {rate_str})")
+            if not getattr(self, "_name_future", None):
+                self._name_future = self.pool.submit(self.name_reader.read, frame.copy(), bar)
+            elif self._name_future.done():
+                sp = self._name_future.result()
+                self._name_future = None
+                if sp is not None:
+                    self.cached = sp
+                    rate_str = "??" if sp["catch_rate"] is None else sp["catch_rate"]
+                    log.info(f"identified: {sp['name']} (catch rate {rate_str})")
         elif self.cached.get("level") is None and self.name_reader is not None:
             # species known but the level OCR missed it that frame; keep trying
-            # (a clearer later frame usually yields it). Drives the Nest Ball.
-            sp = self.name_reader.read(frame, bar)
-            if sp is not None and sp.get("level") is not None and sp["name"] == self.cached["name"]:
-                self.cached["level"] = sp["level"]
+            if not getattr(self, "_name_future", None):
+                self._name_future = self.pool.submit(self.name_reader.read, frame.copy(), bar)
+            elif self._name_future.done():
+                sp = self._name_future.result()
+                self._name_future = None
+                if sp is not None and sp.get("level") is not None and sp["name"] == self.cached["name"]:
+                    self.cached["level"] = sp["level"]
 
         # Record the enemy as OT-caught once per battle, the moment its species is
         # known and the red/white Poke Ball icon shows next to the name. This grows
@@ -793,22 +873,23 @@ class LiveLoop:
                 hp_pct, self.cached["catch_rate"], self.status_rates[status], self.balls, ctx
             )
             line = f"[{turn_note}] " + format_line(self.cached["name"], hp_pct, status, probs)
-            self.overlay.apply_scale(scale_for_window(rect.height))
-            # Pass only known probabilities to the overlay; for an unknown rate
-            # this is empty and show_battle renders "??" from catch_rate=None.
-            overlay_probs = {name: p for name, p in probs if p is not None}
-            self.overlay.show_battle(
-                self.cached.get("id", -1),
-                self.cached["name"],
-                self.cached["catch_rate"],
-                self.turns.turns_completed + 1,
-                overlay_probs,
-                level=self.cached.get("level"),
-                status=status,
-                hp_pct=hp_pct,
-                alpha=bool(self.cached.get("alpha")),
-            )
-            self.overlay.dock_to(rect.left, rect.top, rect.width)
+            if self.mode_override != "dex":
+                self.overlay.apply_scale(scale_for_window(rect.height))
+                # Pass only known probabilities to the overlay; for an unknown rate
+                # this is empty and show_battle renders "??" from catch_rate=None.
+                overlay_probs = {name: p for name, p in probs if p is not None}
+                self.overlay.show_battle(
+                    self.cached.get("id", -1),
+                    self.cached["name"],
+                    self.cached["catch_rate"],
+                    self.turns.turns_completed + 1,
+                    overlay_probs,
+                    level=self.cached.get("level"),
+                    status=status,
+                    hp_pct=hp_pct,
+                    alpha=bool(self.cached.get("alpha")),
+                )
+                self.overlay.dock_to(rect.left, rect.top, rect.width)
         if line != self.last_line:
             log.info(line)
             self.last_line = line

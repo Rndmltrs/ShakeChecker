@@ -19,10 +19,11 @@ Run standalone to preview the look without the game:
 from __future__ import annotations
 
 import win32api
-from PyQt6.QtCore import QPoint, Qt
-from PyQt6.QtGui import QFont, QGuiApplication, QMovie
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
-
+import win32gui
+import win32con
+from PyQt6.QtCore import QPoint, Qt, QTimer, QSize
+from PyQt6.QtGui import QFont, QGuiApplication, QMovie, QCursor, QIcon
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget, QPushButton
 from sprite_loader import SpriteLoader
 
 # Base (scale 1.0) sizes in logical px. apply_scale() multiplies these; 1.0 is the
@@ -175,11 +176,16 @@ class Overlay(QWidget):
         self._panel_w = BASE_PANEL_W
         self._sprite_h = BASE_SPRITE_H
         self._level_px = BASE_LEVEL_PX
+        self.on_mode_toggle = None
+        self._click_through = True
+        self._hover = QTimer(self)
+        self._hover.timeout.connect(self._check_hover)
+        self._hover.start(40)
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
-            | Qt.WindowType.WindowTransparentForInput  # click-through
+            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -194,12 +200,18 @@ class Overlay(QWidget):
         panel.setStyleSheet(
             "#panel { background: rgba(18,18,20,180); border-radius: 10px; }"
             " QLabel { color: #eeeeee; background: transparent; }"
+            " QPushButton { color: #cfd2d6; background: transparent; border: none; }"
+            " QPushButton:hover { color: #ffffff; }"
         )
         root.addWidget(panel)
         self._col = QVBoxLayout(panel)
 
         # header: sprite + name (+ status badge)
         self._header = QHBoxLayout()
+        self._mode_btn = QPushButton()
+        self._mode_btn.setToolTip("Switch to Dex Mode")
+        self._mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mode_btn.clicked.connect(lambda: self.on_mode_toggle() if self.on_mode_toggle else None)
         self._sprite = QLabel()
         self._sprite.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self._name = QLabel("—")
@@ -208,6 +220,7 @@ class Overlay(QWidget):
         self._name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self._status = QLabel()
         self._status.setVisible(False)
+        self._header.addWidget(self._mode_btn)
         self._header.addWidget(self._sprite)
         self._header.addWidget(self._name, 1)
         self._header.addWidget(self._status)
@@ -289,6 +302,12 @@ class Overlay(QWidget):
             pct.setFont(row_font)
             pct.setMinimumWidth(px(BASE_PCT_MINW))
 
+        isz = px(15)  # BASE_ICON_PX from dex_panel
+        from dex_panel import _icon_pixmap
+        self._mode_btn.setIcon(QIcon(_icon_pixmap("book", isz, "#cfd2d6")))
+        self._mode_btn.setIconSize(QSize(isz, isz))
+        self._mode_btn.setFixedSize(isz + px(6), isz + px(6))
+
         self._col.setContentsMargins(
             px(BASE_MARGIN_X), px(BASE_MARGIN_Y), px(BASE_MARGIN_X), px(BASE_MARGIN_Y)
         )
@@ -317,6 +336,8 @@ class Overlay(QWidget):
         status: str | None = None,
         hp_pct: float | None = None,
         alpha: bool = False,
+        is_trainer: bool = False,
+        is_empty: bool = False,
     ) -> None:
         """Update the overlay for the current enemy and show it.
 
@@ -332,26 +353,34 @@ class Overlay(QWidget):
             else ""
         )
         self._name.setText(f"{name}{lvl}")
-        self._sub.setText(subheader_text(catch_rate, turn))
+        if is_empty:
+            self._sub.setText("No battle detected")
+        elif is_trainer:
+            self._sub.setText("Trainer Battle")
+        else:
+            self._sub.setText(subheader_text(catch_rate, turn))
         self._hp.setText(f"HP: {hp_pct:.0f}%" if hp_pct is not None else "")
         self._set_status(status)
-        for ball, label in self._pct_labels.items():
-            if unknown:
-                label.setText("??")
-                label.setStyleSheet("color: #cccccc;")
-                continue
-            prob = probs.get(ball)
-            if prob is None:
-                label.setText("—")
-                label.setStyleSheet("color: #888888;")
-            else:
-                label.setText(f"{100 * prob:5.1f}%")
-                label.setStyleSheet(f"color: {prob_color_hex(prob)};")
-        order = (
-            unknown_ball_order(self._ball_names, self._hidden_names)
-            if unknown
-            else visible_ball_order(self._ball_names, probs, self._hidden_names)
-        )
+        if is_trainer or is_empty:
+            order = []
+        else:
+            for ball, label in self._pct_labels.items():
+                if unknown:
+                    label.setText("??")
+                    label.setStyleSheet("color: #cccccc;")
+                    continue
+                prob = probs.get(ball)
+                if prob is None:
+                    label.setText("—")
+                    label.setStyleSheet("color: #888888;")
+                else:
+                    label.setText(f"{100 * prob:5.1f}%")
+                    label.setStyleSheet(f"color: {prob_color_hex(prob)};")
+            order = (
+                unknown_ball_order(self._ball_names, self._hidden_names)
+                if unknown
+                else visible_ball_order(self._ball_names, probs, self._hidden_names)
+            )
         self._reorder(order)
         self.show()
 
@@ -395,11 +424,29 @@ class Overlay(QWidget):
         self._current_dex = None  # so re-entering a battle restarts the sprite
         self.hide()
 
+    def _check_hover(self) -> None:
+        if not self.isVisible():
+            return
+        over = self.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
+        self._apply_click_through(not over)
+
+    def _apply_click_through(self, on: bool) -> None:
+        if on == self._click_through:
+            return
+        self._click_through = on
+        hwnd = int(self.winId())
+        ex = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+        ex = (ex | win32con.WS_EX_TRANSPARENT) if on else (ex & ~win32con.WS_EX_TRANSPARENT)
+        win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex)
+
     def dock_to(self, left: int, top: int, width: int) -> None:
         """Dock below the game's top-left HUD, on the configured side, inside a
         client rect (PHYSICAL screen coords from win32). Convert to Qt logical
         coords (DPI), anchor by the constant panel width, and only move on change
         so it cannot jitter."""
+        if getattr(self, "_drag_start", None) is not None or getattr(self, "_last_pos", None) is not None:
+            return  # user dragged it; leave it there
+            
         top += DOCK_TOP_OFFSET  # clear the location/money/time/ability HUD
         if DOCK_SIDE == "left":
             lx, ly = phys_to_logical(left, top)
@@ -411,6 +458,15 @@ class Overlay(QWidget):
         if pos != self._last_pos:
             self._last_pos = pos
             self.move(*pos)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event) -> None:
+        if event.buttons() & Qt.MouseButton.LeftButton and getattr(self, "_drag_start", None):
+            self.move(event.globalPosition().toPoint() - self._drag_start)
+            self._last_pos = (self.x(), self.y())
 
     # --- internals ---
 
