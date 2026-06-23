@@ -31,7 +31,7 @@ from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QPainter, Q
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
+    QGridLayout,
     QFrame,
     QHBoxLayout,
     QInputDialog,
@@ -48,8 +48,9 @@ from PyQt6.QtWidgets import (
 from dex_session import LocationView
 from dex_tracker import display_order
 from game_time import season_name
-from overlay import DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, phys_to_logical
+from battle_panel import DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, phys_to_logical
 from sprite_loader import SpriteLoader
+from ui_icons import icon_pixmap
 
 HOVER_POLL_MS = 40  # how often to check if the cursor is over the panel
 ANIMATE_SPRITES = True  # Toggle animated GIFs for the Dex Panel (False saves CPU)
@@ -89,64 +90,6 @@ def rarity_color_hex(rarity: str) -> str:
     return _RARITY_COLOR.get(rarity, _DEFAULT_COLOR)
 
 
-def _icon_pixmap(kind: str, size: int, color: str) -> QPixmap:
-    """A small monochrome header icon drawn in the overlay's own colour (so it
-    matches the panel instead of an OS emoji): 'gear', 'ball' or 'info'."""
-    pm = QPixmap(size, size)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    c = QColor(color)
-    cx = cy = size / 2
-    if kind == "gear":
-        ring = QPen(c, size * 0.15)
-        p.setPen(ring)
-        p.drawEllipse(QPointF(cx, cy), size * 0.25, size * 0.25)
-        teeth = QPen(c, size * 0.14)
-        teeth.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(teeth)
-        for i in range(8):
-            a = i * math.pi / 4
-            p.drawLine(
-                QPointF(cx + math.cos(a) * size * 0.33, cy + math.sin(a) * size * 0.33),
-                QPointF(cx + math.cos(a) * size * 0.46, cy + math.sin(a) * size * 0.46),
-            )
-    elif kind == "ball":
-        p.setPen(QPen(c, size * 0.10))
-        p.drawEllipse(QPointF(cx, cy), size * 0.40, size * 0.40)  # ball outline
-        p.drawLine(QPointF(cx - size * 0.40, cy), QPointF(cx + size * 0.40, cy))  # band
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(c)
-        p.drawEllipse(QPointF(cx, cy), size * 0.14, size * 0.14)  # centre button
-    elif kind == "swords":
-        p.setPen(QPen(c, size * 0.1, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawLine(QPointF(cx - size * 0.3, cy + size * 0.3), QPointF(cx + size * 0.3, cy - size * 0.3))
-        p.drawLine(QPointF(cx - size * 0.25, cy + size * 0.1), QPointF(cx - size * 0.1, cy + size * 0.25))
-        p.drawLine(QPointF(cx + size * 0.3, cy + size * 0.3), QPointF(cx - size * 0.3, cy - size * 0.3))
-        p.drawLine(QPointF(cx + size * 0.25, cy + size * 0.1), QPointF(cx + size * 0.1, cy + size * 0.25))
-    elif kind == "book":
-        p.setPen(QPen(c, size * 0.1, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawLine(QPointF(cx - size * 0.35, cy - size * 0.2), QPointF(cx, cy - size * 0.1))
-        p.drawLine(QPointF(cx - size * 0.35, cy + size * 0.2), QPointF(cx, cy + size * 0.3))
-        p.drawLine(QPointF(cx - size * 0.35, cy - size * 0.2), QPointF(cx - size * 0.35, cy + size * 0.2))
-        p.drawLine(QPointF(cx + size * 0.35, cy - size * 0.2), QPointF(cx, cy - size * 0.1))
-        p.drawLine(QPointF(cx + size * 0.35, cy + size * 0.2), QPointF(cx, cy + size * 0.3))
-        p.drawLine(QPointF(cx + size * 0.35, cy - size * 0.2), QPointF(cx + size * 0.35, cy + size * 0.2))
-        p.drawLine(QPointF(cx, cy - size * 0.1), QPointF(cx, cy + size * 0.3))
-    else:  # info
-        p.setPen(QPen(c, size * 0.10))
-        p.drawEllipse(QPointF(cx, cy), size * 0.42, size * 0.42)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(c)
-        p.drawEllipse(QPointF(cx, cy - size * 0.19), size * 0.065, size * 0.065)  # dot
-        stem = QPen(c, size * 0.13)
-        stem.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(stem)
-        p.drawLine(QPointF(cx, cy - size * 0.02), QPointF(cx, cy + size * 0.22))
-    p.end()
-    return pm
-
-
 class _ClickRow(QWidget):
     """A row that reports clicks (for per-species manual check-off)."""
 
@@ -172,7 +115,6 @@ class DexPanel(QWidget):
         self._click_through: bool | None = None  # current WS_EX_TRANSPARENT state
         self._legend: QWidget | None = None
         self._profiles: QWidget | None = None  # profile management popup
-        self._balls: QWidget | None = None  # ball-picker popup
         self._rows: list[dict] = []  # reused row-widget pool, grown as needed
         self.on_mode_toggle = None
 
@@ -188,13 +130,12 @@ class DexPanel(QWidget):
         self.on_create_profile: Callable[[str], None] | None = None
         self.on_delete_profile: Callable[[str], None] | None = None
         self.get_profiles: Callable[[], tuple[str | None, list[str]]] | None = None
-        # ball picker: toggle one, set all, and read (balls=[(id, name)], hidden ids)
-        self.on_toggle_ball: Callable[[str], None] | None = None
-        self.on_set_all_balls: Callable[[bool], None] | None = None
-        self.get_ball_state: Callable[[], tuple[list[tuple[str, str]], set[str]]] | None = None
         # dex mode: read/flip whether caught species stay in the list (issue #16)
         self.get_keep_caught: Callable[[], bool] | None = None
         self.on_toggle_keep_caught: Callable[[], None] | None = None
+        # auto-switch between dex and battle mode
+        self.get_auto_switch: Callable[[], bool] | None = None
+        self.on_toggle_auto_switch: Callable[[], None] | None = None
         # region override
         self.get_current_region: Callable[[], str | None] | None = None
         self.on_override_region: Callable[[str | None], None] | None = None
@@ -239,21 +180,20 @@ class DexPanel(QWidget):
         self._mode_btn.setToolTip("Switch to Battle Mode")
         self._mode_btn.clicked.connect(lambda: self.on_mode_toggle() if self.on_mode_toggle else None)
         self._bar.addWidget(self._mode_btn)
+        self._mode_label = QLabel("Dex Mode")
+        self._mode_label.setStyleSheet("color: #cfd2d6;")
+        self._bar.addWidget(self._mode_label)
         self._bar.addStretch(1)
         self._profile_btn = QPushButton()
         self._profile_btn.setToolTip("Profiles: create / load / delete")
         self._profile_btn.clicked.connect(self._toggle_profiles)
-        self._balls_btn = QPushButton()
-        self._balls_btn.setToolTip("Choose which balls to show")
-        self._balls_btn.clicked.connect(self._toggle_balls)
         self._info_btn = QPushButton()
         self._info_btn.setToolTip("Rarity colour legend")
         self._info_btn.clicked.connect(self._toggle_legend)
-        for b in (self._mode_btn, self._profile_btn, self._balls_btn, self._info_btn):
+        for b in (self._mode_btn, self._profile_btn, self._info_btn):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._bar.addWidget(self._profile_btn)
-        self._bar.addWidget(self._balls_btn)
         self._bar.addWidget(self._info_btn)
+        self._bar.addWidget(self._profile_btn)
         self._col.addLayout(self._bar)
 
         self._title = QLabel("—")
@@ -304,14 +244,14 @@ class DexPanel(QWidget):
         self._way_fm = QFontMetrics(self._font(self._px(BASE_SUB_PX)))
         self._title.setFont(self._font(self._px(BASE_TITLE_PX), bold=True))
         self._subtitle.setFont(self._font(self._px(BASE_SUB_PX)))
+        self._mode_label.setFont(self._font(self._px(13), bold=True))
         isz = self._px(BASE_ICON_PX)
         for btn, kind in (
-            (self._mode_btn, "swords"),
+            (self._mode_btn, "book"),
             (self._profile_btn, "gear"),
-            (self._balls_btn, "ball"),
             (self._info_btn, "info"),
         ):
-            btn.setIcon(QIcon(_icon_pixmap(kind, isz, "#cfd2d6")))
+            btn.setIcon(QIcon(icon_pixmap(kind, isz, "#cfd2d6")))
             btn.setIconSize(QSize(isz, isz))
             btn.setFixedSize(isz + self._px(6), isz + self._px(6))
         self._col.setContentsMargins(
@@ -363,9 +303,31 @@ class DexPanel(QWidget):
         self._root.activate()
         self.adjustSize()
         self.show()
+        self._bring_above_game()
         self._apply_click_through(True)  # start passing input through
         if not self._hover.isActive():
             self._hover.start()
+
+    def _bring_above_game(self) -> None:
+        try:
+            handle = self.windowHandle()
+            if not handle:
+                return
+            parent = handle.transientParent()
+            if not parent:
+                return
+            game_hwnd = int(parent.winId())
+            if not game_hwnd:
+                return
+            
+            hwnd = int(self.winId())
+            prev_hwnd = win32gui.GetWindow(game_hwnd, win32con.GW_HWNDPREV)
+            insert_after = prev_hwnd if prev_hwnd else win32con.HWND_TOP
+            
+            flags = win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE | win32con.SWP_NOOWNERZORDER
+            win32gui.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags)
+        except Exception:
+            pass
 
     def hide_panel(self) -> None:
         self._hover.stop()
@@ -375,9 +337,19 @@ class DexPanel(QWidget):
         self.hide()
 
     def _hide_popups(self) -> None:
-        for popup in (self._legend, self._profiles, self._balls):
-            if popup is not None and popup.isVisible():
-                popup.hide()
+        try:
+            if self._legend is not None and self._legend.isVisible():
+                self._legend.close()
+        except RuntimeError:
+            pass
+        self._legend = None
+
+        try:
+            if self._profiles is not None and self._profiles.isVisible():
+                self._profiles.close()
+        except RuntimeError:
+            pass
+        self._profiles = None
 
     def _on_app_state_changed(self, state: Qt.ApplicationState) -> None:
         # Close the header popups when focus leaves ShakeChecker for the game.
@@ -410,7 +382,7 @@ class DexPanel(QWidget):
         # reaches the actual buttons, reducing the chance of clicks falling through
         # if the main thread is temporarily busy doing OCR.
         over = self.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
-        for popup in (self._legend, self._profiles, self._balls):
+        for popup in (self._legend, self._profiles):
             if popup is not None and popup.isVisible():
                 over = over or popup.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
         self._apply_click_through(not over)
@@ -431,23 +403,30 @@ class DexPanel(QWidget):
         if dex is not None and self.on_toggle_caught is not None:
             self.on_toggle_caught(dex)
 
-    def _toggle_profiles(self) -> None:
+    def _toggle_profiles(self, anchor_pos: QPoint | bool | None = None, parent_widget: QWidget | None = None) -> None:
+        if isinstance(anchor_pos, bool):
+            anchor_pos = None
         if self._profiles is not None and self._profiles.isVisible():
-            self._profiles.hide()
+            self._profiles.close()
+            self._profiles = None
             return
-        self._open_profiles()
+        self._open_profiles(anchor_pos, parent_widget)
 
-    def _open_profiles(self) -> None:
+    def _open_profiles(self, anchor_pos: QPoint | None = None, parent_widget: QWidget | None = None) -> None:
         # rebuilt each time so it reflects the current profile list
         if self._profiles is not None:
             self._profiles.close()
-        self._profiles = self._build_profiles()
-        self._profiles.move(self._profile_btn.mapToGlobal(self._profile_btn.rect().bottomLeft()))
+        self._profiles = self._build_profiles(parent_widget)
+        if anchor_pos is not None:
+            self._profiles.move(anchor_pos)
+        else:
+            self._profiles.move(self._profile_btn.mapToGlobal(self._profile_btn.rect().bottomLeft()))
         self._profiles.show()
+        self._profiles.raise_()
 
-    def _build_profiles(self) -> QWidget:
+    def _build_profiles(self, parent_widget: QWidget | None = None) -> QWidget:
         active, accounts = self.get_profiles() if self.get_profiles else (None, [])
-        w, box = self._popup_window("profiles")
+        w, box = self._popup_window("profiles", parent_widget)
         head = QLabel("Profiles")
         head.setFont(self._font(12, bold=True))
         head.setStyleSheet("color: #ffffff;")
@@ -498,6 +477,16 @@ class DexPanel(QWidget):
         toggle.clicked.connect(self._toggle_keep_caught)
         box.addWidget(toggle)
 
+        auto_switch = self.get_auto_switch() if self.get_auto_switch is not None else True
+        auto_toggle = QPushButton(("✓  " if auto_switch else "    ") + "Auto-switch mode")
+        auto_toggle.setFont(self._font(12))
+        auto_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        auto_toggle.setToolTip("Automatically switch to Battle Mode when a battle starts, and Dex Mode in the overworld.")
+        auto_shade = "#eeeeee" if auto_switch else "#777777"
+        auto_toggle.setStyleSheet(f"QPushButton {{ text-align: left; color: {auto_shade}; }}")
+        auto_toggle.clicked.connect(self._toggle_auto_switch)
+        box.addWidget(auto_toggle)
+
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
         sep2.setStyleSheet("color: rgba(255,255,255,40);")
@@ -507,31 +496,28 @@ class DexPanel(QWidget):
         reg_head.setStyleSheet("color: #ffffff;")
         box.addWidget(reg_head)
         
-        combo = QComboBox()
-        combo.addItems(["Auto", "Kanto", "Johto", "Hoenn", "Sinnoh", "Unova"])
-        combo.setStyleSheet(
-            "QComboBox {"
-            " color: #eeeeee; background: rgba(255,255,255,20);"
-            " border: 1px solid rgba(255,255,255,40); border-radius: 4px; padding: 2px 4px;"
-            "}"
-            "QComboBox::drop-down { border: none; }"
-            "QComboBox QAbstractItemView {"
-            " color: #eeeeee; background: rgba(18,18,20,255);"
-            " selection-background-color: rgba(255,255,255,40);"
-            "}"
-        )
-        combo.setFont(self._font(11))
-        combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        reg_grid = QGridLayout()
+        reg_grid.setSpacing(4)
+        regions = ["Auto", "Kanto", "Johto", "Hoenn", "Sinnoh", "Unova"]
         curr = self.get_current_region() if self.get_current_region else None
-        if curr:
-            idx = combo.findText(curr.title())
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
-        else:
-            combo.setCurrentIndex(0)
+        
+        for i, reg in enumerate(regions):
+            btn = QPushButton(reg)
+            btn.setFont(self._font(11))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             
-        combo.currentTextChanged.connect(self._region_changed)
-        box.addWidget(combo)
+            is_active = (curr == reg) or (curr is None and reg == "Auto")
+            bg = "rgba(255,255,255,40)" if is_active else "rgba(255,255,255,10)"
+            col = "#ffffff" if is_active else "#aaaaaa"
+            
+            btn.setStyleSheet(
+                f"QPushButton {{ color: {col}; background: {bg}; border-radius: 4px; padding: 4px 0px; }}"
+                f"QPushButton:hover {{ background: rgba(255,255,255,60); color: #ffffff; }}"
+            )
+            btn.clicked.connect(lambda _=False, r=reg: self._region_changed(r))
+            reg_grid.addWidget(btn, i // 3, i % 3)
+            
+        box.addLayout(reg_grid)
 
         sep3 = QFrame()
         sep3.setFrameShape(QFrame.Shape.HLine)
@@ -591,6 +577,7 @@ class DexPanel(QWidget):
     def _region_changed(self, text: str) -> None:
         if self.on_override_region is not None:
             self.on_override_region(text if text != "Auto" else None)
+        self._open_profiles()
 
     def _scale_auto_changed(self, state: int) -> None:
         if state == Qt.CheckState.Checked.value:
@@ -612,6 +599,11 @@ class DexPanel(QWidget):
     def _toggle_keep_caught(self) -> None:
         if self.on_toggle_keep_caught is not None:
             self.on_toggle_keep_caught()
+        self._open_profiles()  # rebuild so the check state updates, popup stays open
+        
+    def _toggle_auto_switch(self) -> None:
+        if self.on_toggle_auto_switch is not None:
+            self.on_toggle_auto_switch()
         self._open_profiles()  # rebuild so the check state updates, popup stays open
 
     def _choose_profile(self, name: str) -> None:
@@ -635,18 +627,24 @@ class DexPanel(QWidget):
         if self._profiles is not None:
             self._profiles.hide()
 
-    def _toggle_legend(self) -> None:
-        if self._legend is None:
-            self._legend = self._build_legend()
-        if self._legend.isVisible():
-            self._legend.hide()
+    def _toggle_legend(self, _=False) -> None:
+        if self._legend is not None and self._legend.isVisible():
+            self._legend.close()
+            self._legend = None
             return
+        self._open_legend(self)
+
+    def _open_legend(self, parent_widget: QWidget | None = None) -> None:
+        if self._legend is not None:
+            self._legend.close()
+        self._legend = self._build_legend(parent_widget)
         self._legend.move(self._info_btn.mapToGlobal(self._info_btn.rect().bottomRight()))
         self._legend.show()
 
-    def _popup_window(self, obj_name: str) -> tuple[QWidget, QVBoxLayout]:
+    def _popup_window(self, obj_name: str, parent_widget: QWidget | None = None) -> tuple[QWidget, QVBoxLayout]:
         """A frameless dark popup matching the panel; returns (window, content box)."""
-        w = QWidget(self)
+        w = QWidget(parent_widget)  # Detach from self so it can show while DexPanel is hidden
+        w.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         w.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
@@ -667,8 +665,8 @@ class DexPanel(QWidget):
         box.setSpacing(3)
         return w, box
 
-    def _build_legend(self) -> QWidget:
-        w, box = self._popup_window("legend")
+    def _build_legend(self, parent_widget: QWidget | None = None) -> QWidget:
+        w, box = self._popup_window("legend", parent_widget)
         head = QLabel("Rarity")
         head.setFont(self._font(12, bold=True))
         head.setStyleSheet("color: #ffffff;")
@@ -678,64 +676,6 @@ class DexPanel(QWidget):
             lab.setFont(self._font(12))
             box.addWidget(lab)
         return w
-
-    # --- ball picker (which balls the catch overlay shows) ---
-
-    def _toggle_balls(self) -> None:
-        if self._balls is not None and self._balls.isVisible():
-            self._balls.hide()
-            return
-        self._open_balls()
-
-    def _open_balls(self) -> None:
-        if self._balls is not None:
-            self._balls.close()
-        self._balls = self._build_balls()
-        self._balls.move(self._balls_btn.mapToGlobal(self._balls_btn.rect().bottomLeft()))
-        self._balls.show()
-
-    def _build_balls(self) -> QWidget:
-        balls, hidden = self.get_ball_state() if self.get_ball_state else ([], set())
-        w, box = self._popup_window("balls")
-        head = QLabel("Show balls")
-        head.setFont(self._font(12, bold=True))
-        head.setStyleSheet("color: #ffffff;")
-        box.addWidget(head)
-        icon_h = self._px(BASE_SPRITE_H)
-        for ball_id, ball_name in balls:
-            shown = ball_id not in hidden
-            sw = QPushButton(("✓  " if shown else "    ") + ball_name)
-            sw.setFont(self._font(12))
-            sw.setCursor(Qt.CursorShape.PointingHandCursor)
-            sw.setIcon(QIcon(self._loader.ball_pixmap(ball_name, icon_h)))
-            sw.setIconSize(QSize(icon_h, icon_h))
-            shade = "#eeeeee" if shown else "#777777"
-            sw.setStyleSheet(f"QPushButton {{ text-align: left; color: {shade}; }}")
-            sw.clicked.connect(lambda _=False, i=ball_id: self._toggle_ball(i))
-            box.addWidget(sw)
-        row = QHBoxLayout()
-        for text, vis in (("All", True), ("None", False)):
-            b = QPushButton(text)
-            b.setFont(self._font(11))
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet("QPushButton { color: #9aa0aa; }")
-            b.clicked.connect(lambda _=False, v=vis: self._set_all_balls(v))
-            row.addWidget(b)
-        row.addStretch(1)
-        cont = QWidget()
-        cont.setLayout(row)
-        box.addWidget(cont)
-        return w
-
-    def _toggle_ball(self, ball_id: str) -> None:
-        if self.on_toggle_ball is not None:
-            self.on_toggle_ball(ball_id)
-        self._open_balls()  # rebuild so the check state updates, popup stays open
-
-    def _set_all_balls(self, visible: bool) -> None:
-        if self.on_set_all_balls is not None:
-            self.on_set_all_balls(visible)
-        self._open_balls()
 
     # --- internals ---
 
