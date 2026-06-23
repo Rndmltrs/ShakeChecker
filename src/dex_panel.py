@@ -139,7 +139,10 @@ class DexPanel(QWidget):
         # auto-switch between dex and battle mode
         self.get_auto_switch: Callable[[], bool] | None = None
         self.on_toggle_auto_switch: Callable[[], None] | None = None
-        # region override
+        # enable/disable clicking a row to mark as caught
+        self.get_click_to_catch: Callable[[], bool] | None = None
+        self.on_toggle_click_to_catch: Callable[[], None] | None = None
+        # region overrides
         self.get_current_region: Callable[[], str | None] | None = None
         self.on_override_region: Callable[[str | None], None] | None = None
         # panel scale override
@@ -382,6 +385,8 @@ class DexPanel(QWidget):
         win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex)
 
     def _row_clicked(self, index: int) -> None:
+        if self.get_click_to_catch is not None and not self.get_click_to_catch():
+            return
         dex = self._rows[index]["dex"] if index < len(self._rows) else None
         if dex is not None and self.on_toggle_caught is not None:
             self.on_toggle_caught(dex)
@@ -469,6 +474,16 @@ class DexPanel(QWidget):
         auto_toggle.setStyleSheet(f"QPushButton {{ text-align: left; color: {auto_shade}; }}")
         auto_toggle.clicked.connect(self._toggle_auto_switch)
         box.addWidget(auto_toggle)
+
+        click_to_catch = self.get_click_to_catch() if self.get_click_to_catch is not None else True
+        click_toggle = QPushButton(("✓  " if click_to_catch else "    ") + "Click to mark caught")
+        click_toggle.setFont(self._font(12))
+        click_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        click_toggle.setToolTip("Click a species in the list to manually toggle its caught status.")
+        click_shade = "#eeeeee" if click_to_catch else "#777777"
+        click_toggle.setStyleSheet(f"QPushButton {{ text-align: left; color: {click_shade}; }}")
+        click_toggle.clicked.connect(self._toggle_click_to_catch)
+        box.addWidget(click_toggle)
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
@@ -588,6 +603,11 @@ class DexPanel(QWidget):
         if self.on_toggle_auto_switch is not None:
             self.on_toggle_auto_switch()
         self._open_profiles()  # rebuild so the check state updates, popup stays open
+
+    def _toggle_click_to_catch(self) -> None:
+        if self.on_toggle_click_to_catch is not None:
+            self.on_toggle_click_to_catch()
+        self._open_profiles()
 
     def _choose_profile(self, name: str) -> None:
         if self.on_select_profile is not None:

@@ -441,6 +441,8 @@ class LiveLoop:
             self.dex_panel.on_toggle_keep_caught = self._toggle_keep_caught
             self.dex_panel.get_auto_switch = lambda: self.settings.auto_switch
             self.dex_panel.on_toggle_auto_switch = self._app_toggle_auto_switch
+            self.dex_panel.get_click_to_catch = lambda: self.settings.click_to_catch
+            self.dex_panel.on_toggle_click_to_catch = self._app_toggle_click_to_catch
             self.dex_panel.get_current_region = lambda: self.dex.region if self.dex else None
             self.dex_panel.on_override_region = self._dex_override_region
             self.dex_panel.get_panel_scale = lambda: self.settings.panel_scale
@@ -504,6 +506,14 @@ class LiveLoop:
         else:
             self.mode_override = "dex" if self.state == AppState.BATTLE else "battle"
         self._apply_mode_change(f"auto switch toggled, mode is now: {self.mode_override}")
+
+    def _app_toggle_click_to_catch(self) -> None:
+        self.settings.toggle_click_to_catch()
+        if self.dex_panel is not None:
+            self.dex_panel._hide_popups()
+
+    def _ball_state(self, ball_id: str) -> bool:
+        return self.settings.is_ball_visible(ball_id)
 
     def _set_owner(self, widget, owner_hwnd: int) -> None:
         if widget is not None:

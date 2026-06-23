@@ -19,12 +19,21 @@ DEFAULT_KEEP_CAUGHT = True
 
 
 class Settings:
-    def __init__(self, path: Path, hidden_balls: set[str], keep_caught: bool, panel_scale: float | None = None, auto_switch: bool = True) -> None:
+    def __init__(
+        self,
+        path: Path,
+        hidden_balls: set[str],
+        keep_caught: bool,
+        panel_scale: float | None = None,
+        auto_switch: bool = True,
+        click_to_catch: bool = True,
+    ) -> None:
         self.path = path
         self.hidden_balls = hidden_balls
         self.keep_caught = keep_caught
         self.panel_scale = panel_scale
         self.auto_switch = auto_switch
+        self.click_to_catch = click_to_catch
 
     @classmethod
     def load(cls, userdata_dir: Path | str) -> Settings:
@@ -33,18 +42,20 @@ class Settings:
         keep_caught = DEFAULT_KEEP_CAUGHT
         panel_scale: float | None = None
         auto_switch = True
+        click_to_catch = True
         if path.exists():
             try:
                 raw = json.loads(path.read_text("utf-8"))
                 hidden = {str(b) for b in raw.get("hidden_balls", [])}
                 keep_caught = bool(raw.get("keep_caught", DEFAULT_KEEP_CAUGHT))
                 auto_switch = bool(raw.get("auto_switch", True))
+                click_to_catch = bool(raw.get("click_to_catch", True))
                 ps = raw.get("panel_scale")
                 if ps is not None:
                     panel_scale = float(ps)
             except (json.JSONDecodeError, OSError, ValueError):
                 pass  # corrupt/unreadable -> fall back to defaults
-        return cls(path, hidden, keep_caught, panel_scale, auto_switch)
+        return cls(path, hidden, keep_caught, panel_scale, auto_switch, click_to_catch)
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,6 +64,7 @@ class Settings:
             "keep_caught": self.keep_caught,
             "panel_scale": self.panel_scale,
             "auto_switch": self.auto_switch,
+            "click_to_catch": self.click_to_catch,
         }
         self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), "utf-8")
 
@@ -92,3 +104,9 @@ class Settings:
         self.auto_switch = not self.auto_switch
         self.save()
         return self.auto_switch
+
+    def toggle_click_to_catch(self) -> bool:
+        """Flip the click-to-catch mode setting, persist, and return the new value."""
+        self.click_to_catch = not self.click_to_catch
+        self.save()
+        return self.click_to_catch
