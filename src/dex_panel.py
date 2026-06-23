@@ -48,7 +48,10 @@ from PyQt6.QtWidgets import (
 from dex_session import LocationView
 from dex_tracker import display_order
 from game_time import season_name
-from battle_panel import DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, phys_to_logical
+from ui_overlay import (
+    DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, 
+    phys_to_logical, bring_overlay_above_game
+)
 from sprite_loader import SpriteLoader
 from ui_icons import icon_pixmap
 
@@ -219,7 +222,7 @@ class DexPanel(QWidget):
         self._list = QWidget()
         self._list.setStyleSheet("background: transparent;")
         self._list_layout = QVBoxLayout(self._list)
-        self._list_layout.setContentsMargins(0, 0, 8, 0)  # gap so the scrollbar clears the way text
+        self._list_layout.setContentsMargins(0, 0, 16, 0)  # gap so the scrollbar clears the way text
         self._list_layout.addStretch(1)  # keep rows top-aligned
         self._scroll.setWidget(self._list)
         self._col.addWidget(self._scroll)
@@ -262,6 +265,7 @@ class DexPanel(QWidget):
         )
         self._col.setSpacing(self._px(BASE_COL_SPACING))
         self._list_layout.setSpacing(self._px(BASE_ROW_SPACING))
+        self._list_layout.setContentsMargins(0, 0, self._px(16), 0)
         for r in self._rows:
             self._style_row(r)
             self._clear_row_sprite(r)  # force reload at the new sprite size
@@ -303,31 +307,10 @@ class DexPanel(QWidget):
         self._root.activate()
         self.adjustSize()
         self.show()
-        self._bring_above_game()
+        bring_overlay_above_game(self)
         self._apply_click_through(True)  # start passing input through
         if not self._hover.isActive():
             self._hover.start()
-
-    def _bring_above_game(self) -> None:
-        try:
-            handle = self.windowHandle()
-            if not handle:
-                return
-            parent = handle.transientParent()
-            if not parent:
-                return
-            game_hwnd = int(parent.winId())
-            if not game_hwnd:
-                return
-            
-            hwnd = int(self.winId())
-            prev_hwnd = win32gui.GetWindow(game_hwnd, win32con.GW_HWNDPREV)
-            insert_after = prev_hwnd if prev_hwnd else win32con.HWND_TOP
-            
-            flags = win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE | win32con.SWP_NOOWNERZORDER
-            win32gui.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags)
-        except Exception:
-            pass
 
     def hide_panel(self) -> None:
         self._hover.stop()
@@ -753,6 +736,7 @@ class DexPanel(QWidget):
             + self._px(BASE_SPRITE_COL_W)
             + self._name_fm.horizontalAdvance(entry.name)
             + 2 * self._px(BASE_ROW_SPACING)
+            + self._px(16)
         )
         budget = self._panel_w - used
         if not way or budget < self._px(16):

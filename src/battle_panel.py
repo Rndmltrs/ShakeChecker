@@ -25,6 +25,10 @@ from PyQt6.QtCore import QPoint, Qt, QTimer, QSize
 from PyQt6.QtGui import QFont, QGuiApplication, QMovie, QCursor, QIcon, QPixmap
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget, QPushButton
 from sprite_loader import SpriteLoader
+from ui_overlay import (
+    DOCK_MARGIN, DOCK_SIDE, DOCK_TOP_OFFSET, MIN_SCALE, 
+    phys_to_logical, scale_for_window, bring_overlay_above_game
+)
 
 # Base (scale 1.0) sizes in logical px. apply_scale() multiplies these; 1.0 is the
 # cap, so the overlay is never larger than this.
@@ -42,20 +46,7 @@ BASE_COL_SPACING = 3
 BASE_HEADER_SPACING = 8
 BASE_ROW_SPACING = 6
 BASE_PCT_MINW = 48
-DOCK_MARGIN = 12  # gap from the game window's side edge
-DOCK_SIDE = "left"  # "left" or "right"
-# Push the overlay down past the game's fixed top-left HUD (location, money,
-# time, ability, and a possible donator line) plus ~0.5 cm of gap. The HUD is a
-# fixed pixel size regardless of window size, so this is a constant PHYSICAL
-# offset added to the client top before conversion.
-DOCK_TOP_OFFSET = 160
 
-# Window-height (physical px) at/above which the overlay is at full size, and the
-# smallest scale it will shrink to. Below REF the overlay scales down with the
-# window so it stays inside a small battle view.
-REF_WINDOW_HEIGHT = 1400
-MIN_SCALE = 0.6
-UI_SCALE_MULTIPLIER = 1.0  # Manual override multiplier to increase UI size
 
 # probability colour thresholds (fraction 0-1) -> hex
 _RED, _YELLOW, _GREEN = "#ff5555", "#ffcc44", "#55dd66"
@@ -77,10 +68,6 @@ def subheader_text(catch_rate: int | None, turn: int) -> str:
     return f"Rate: {rate}  ·  Turn {turn}"
 
 
-def scale_for_window(height_px: int) -> float:
-    """Overlay scale for a game-window client height."""
-    return max(1.0, height_px / REF_WINDOW_HEIGHT) * UI_SCALE_MULTIPLIER
-
 
 # Status code -> (label, badge background) following the in-game colour scheme.
 _STATUS_BADGE = {
@@ -96,43 +83,6 @@ def status_badge(status: str | None) -> tuple[str, str] | None:
     """(label, background colour) for a status, or None for no status (-> hidden)."""
     return _STATUS_BADGE.get(status.lower()) if status else None
 
-
-def phys_to_logical(px: int, py: int) -> tuple[int, int]:
-    """Convert a physical-pixel screen point (from win32) to Qt's logical-pixel
-    coordinates, which move() expects. They differ when Windows display scaling
-    is not 100%; without this the overlay lands on the wrong monitor.
-    
-    Queries the Windows OS directly via win32api.EnumDisplayMonitors() to find the 
-    absolute physical pixel bounds of all active monitors. Sorts the physical monitors 
-    from left-to-right and maps them directly to PyQt6's virtual QScreen list.
-    Calculates the exact physical offset from the monitor's origin and divides by 
-    the specific devicePixelRatio() of that screen to perfectly map mixed-DPI setups."""
-    screens = QGuiApplication.screens()
-    if not screens:
-        return px, py
-
-    monitors = win32api.EnumDisplayMonitors()
-    monitors.sort(key=lambda m: m[2][0])
-    screens_sorted = sorted(screens, key=lambda s: s.geometry().x())
-
-    target_idx = 0
-    for i, m in enumerate(monitors):
-        left, top, right, bottom = m[2]
-        if left <= px < right and top <= py < bottom:
-            target_idx = i
-            break
-
-    if target_idx >= len(screens_sorted):
-        target_idx = 0
-
-    phys_left, phys_top, _, _ = monitors[target_idx][2]
-    qt_screen = screens_sorted[target_idx]
-    dpr = qt_screen.devicePixelRatio()
-
-    lx = qt_screen.geometry().x() + (px - phys_left) / dpr
-    ly = qt_screen.geometry().y() + (py - phys_top) / dpr
-
-    return round(lx), round(ly)
 
 
 def visible_ball_order(
@@ -449,7 +399,7 @@ class BattlePanel(QWidget):
             )
         self._reorder(order, is_empty=is_empty)
         self.show()
-        self._bring_above_game()
+        bring_overlay_above_game(self)
 
     def set_hidden_names(self, names: set[str]) -> None:
         """Choose which balls the overlay shows (by ball NAME). Hidden balls drop
@@ -489,27 +439,6 @@ class BattlePanel(QWidget):
         self._root.invalidate()
         self._root.activate()
         self.setFixedHeight(self.sizeHint().height())
-
-    def _bring_above_game(self) -> None:
-        try:
-            handle = self.windowHandle()
-            if not handle:
-                return
-            parent = handle.transientParent()
-            if not parent:
-                return
-            game_hwnd = int(parent.winId())
-            if not game_hwnd:
-                return
-            
-            hwnd = int(self.winId())
-            prev_hwnd = win32gui.GetWindow(game_hwnd, win32con.GW_HWNDPREV)
-            insert_after = prev_hwnd if prev_hwnd else win32con.HWND_TOP
-            
-            flags = win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE | win32con.SWP_NOOWNERZORDER
-            win32gui.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags)
-        except Exception:
-            pass
 
     def hide_battle(self) -> None:
         if self._movie is not None:

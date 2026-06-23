@@ -63,7 +63,8 @@ from game_time import current_game_minute, is_dusk_ball_night, season_name
 from hp_settler import HpSettler
 from location_reader import is_cave_location, read_game_clock, read_location
 from name_reader import NameReader
-from battle_panel import BattlePanel, scale_for_window
+from battle_panel import BattlePanel
+from ui_overlay import scale_for_window
 from settings_store import Settings
 from status_settler import StatusSettler
 from turn_tracker import TurnTracker
@@ -471,6 +472,19 @@ class LiveLoop:
     def _frame_interval(self) -> float:
         return BATTLE_FRAME_S if self.state is AppState.BATTLE else IDLE_FRAME_S
 
+    def _apply_mode_change(self, log_msg: str) -> None:
+        if self.mode_override == "dex":
+            self.battle_panel.hide()
+        elif self.mode_override == "battle":
+            if self.dex_panel is not None:
+                self.dex_panel.hide_panel()
+        QApplication.processEvents()
+        
+        log.info(log_msg)
+        if self.mode_override == "dex":
+            self._refresh_dex_panel()
+        self._tick()
+
     def _on_mode_toggle(self) -> None:
         if self.dex_panel is not None:
             self.dex_panel._hide_popups()
@@ -480,18 +494,7 @@ class LiveLoop:
             self.mode_override = "battle"
         else:
             self.mode_override = "dex"
-            
-        if self.mode_override == "dex":
-            self.battle_panel.hide()
-        elif self.mode_override == "battle":
-            if self.dex_panel is not None:
-                self.dex_panel.hide_panel()
-        QApplication.processEvents()
-        
-        log.info(f"manual mode override: {self.mode_override}")
-        if self.mode_override == "dex":
-            self._refresh_dex_panel()
-        self._tick()
+        self._apply_mode_change(f"manual mode override: {self.mode_override}")
 
     def _app_toggle_auto_switch(self) -> None:
         if self.dex_panel is not None:
@@ -500,18 +503,7 @@ class LiveLoop:
             self.mode_override = "auto"
         else:
             self.mode_override = "dex" if self.state == AppState.BATTLE else "battle"
-            
-        if self.mode_override == "dex":
-            self.battle_panel.hide()
-        elif self.mode_override == "battle":
-            if self.dex_panel is not None:
-                self.dex_panel.hide_panel()
-        QApplication.processEvents()
-            
-        log.info(f"auto switch toggled, mode is now: {self.mode_override}")
-        if self.mode_override == "dex":
-            self._refresh_dex_panel()
-        self._tick()
+        self._apply_mode_change(f"auto switch toggled, mode is now: {self.mode_override}")
 
     def _set_owner(self, widget, owner_hwnd: int) -> None:
         if widget is not None:
@@ -841,7 +833,20 @@ class LiveLoop:
             if self._trainer_decided:
                 self._update_single(frame, reading.bars[0], rect, is_trainer=self._is_trainer)
             else:
-                self.battle_panel.hide_battle()
+                if self.mode_override != "dex":
+                    self.battle_panel.apply_scale(scale_for_window(rect.height))
+                    self.battle_panel.show_battle(
+                        dex_id=0,
+                        name="Reading battle...",
+                        catch_rate=None,
+                        turn=self.turns.turns_completed + 1,
+                        probs={},
+                        level=None,
+                        status=None,
+                        hp_pct=reading.bars[0].hp_pct,
+                        alpha=False,
+                    )
+                    self.battle_panel.dock_to(rect.left, rect.top, rect.width)
         elif reading.state is BattleState.MULTI and self.last_line != "multi":
             # horde / double: wait until a single wild Pokemon remains
             log.info("multiple enemy bars (horde): waiting for one to remain")
@@ -957,11 +962,11 @@ class LiveLoop:
             )
             line = f"[{turn_note}] " + format_line(self.cached["name"], hp_pct, status, probs)
             if self.mode_override != "dex":
-                self.overlay.apply_scale(scale_for_window(rect.height))
+                self.battle_panel.apply_scale(scale_for_window(rect.height))
                 # Pass only known probabilities to the overlay; for an unknown rate
                 # this is empty and show_battle renders "??" from catch_rate=None.
                 overlay_probs = {name: p for name, p in probs if p is not None}
-                self.overlay.show_battle(
+                self.battle_panel.show_battle(
                     self.cached.get("id", -1),
                     self.cached["name"],
                     self.cached["catch_rate"],
@@ -972,7 +977,7 @@ class LiveLoop:
                     hp_pct=hp_pct,
                     alpha=bool(self.cached.get("alpha")),
                 )
-                self.overlay.dock_to(rect.left, rect.top, rect.width)
+                self.battle_panel.dock_to(rect.left, rect.top, rect.width)
         if line != self.last_line:
             log.info(line)
             self.last_line = line
