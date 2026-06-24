@@ -16,6 +16,7 @@ from dex_tracker import (
 ROOT = Path(__file__).parent.parent
 ENCOUNTERS = ROOT / "src" / "data" / "encounters.json"
 LEGENDARIES = ROOT / "src" / "data" / "legendaries.json"
+AREA_INDEX = ROOT / "src" / "data" / "area_index.json"
 
 
 def enc(
@@ -182,7 +183,6 @@ def test_display_order_keep_caught_lists_all_caught_by_id():
 def data() -> EncounterData:
     return EncounterData.load(ENCOUNTERS, LEGENDARIES)
 
-
 def test_real_data_loads():
     d = EncounterData.load(ENCOUNTERS, LEGENDARIES)
     assert d.location_name("KANTO_VIRIDIAN_FOREST") == "VIRIDIAN FOREST"
@@ -227,7 +227,7 @@ def test_regions_for_name(data):
 
 
 def test_resolver_pins_region_from_unique_location(data):
-    r = RegionResolver(data)
+    r = RegionResolver(data, {})
     # ambiguous name before any region is known -> unresolved
     assert r.resolve("Route 5") is None
     # a region-unique location pins Kanto
@@ -238,7 +238,7 @@ def test_resolver_pins_region_from_unique_location(data):
 
 
 def test_resolver_takes_over_region_on_switch(data):
-    r = RegionResolver(data)
+    r = RegionResolver(data, {})
     r.resolve("Viridian Forest")  # Kanto
     assert r.region == "KANTO"
     # arriving at a Unova-unique place switches the region (the harbour-town case)

@@ -270,9 +270,6 @@ class DexPanel(BaseOverlay):
             self.adjustSize()
         self.show()
         bring_overlay_above_game(self)
-        self._apply_click_through(True)  # start passing input through
-        if not self._hover.isActive():
-            self._hover.start()
 
     def set_loading(self, is_loading: bool) -> None:
         """Show a small spinner next to the title while OCR is running."""
@@ -287,7 +284,6 @@ class DexPanel(BaseOverlay):
             self._title.setText(title)
 
     def hide_panel(self) -> None:
-        self._hover.stop()
         self._hide_popups()
         for r in self._rows:  # stop GIFs while hidden; they reload on re-show
             r.suspend_sprite()
@@ -330,21 +326,7 @@ class DexPanel(BaseOverlay):
             self._last_pos = pos
             self.move(*pos)
 
-    # --- interaction (hover -> click-through toggle) ---
 
-    def _check_hover(self) -> None:
-        if not self.isVisible():
-            return
-        # Add a 30px buffer around the panel so it turns solid *before* the mouse
-        # reaches the actual buttons, reducing the chance of clicks falling through
-        # if the main thread is temporarily busy doing OCR.
-        over = self.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
-        for popup in (self._legend, self._profiles):
-            if popup is not None and popup.isVisible():
-                over = over or popup.frameGeometry().adjusted(-30, -30, 30, 30).contains(
-                    QCursor.pos()
-                )
-        self._apply_click_through(not over)
 
     def _row_clicked(self, index: int) -> None:
         if self.get_click_to_catch is not None and not self.get_click_to_catch():

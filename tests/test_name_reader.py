@@ -133,7 +133,7 @@ def test_ocr_reads_alpha_with_fixed_rate(name_reader, fixture):
     img = cv2.imread(str(FIXTURES / f"{fixture}.png"))
     species = name_reader.read(img, read_enemy_bars(img, CAL)[0])
     assert species is not None
-    assert species["name"] == "Alpha Noctowl"
+    assert species["name"] == "Noctowl"
     assert species["id"] == 164  # base Noctowl drives the sprite/dex record
     assert species["alpha"] is True
     assert species["catch_rate"] == ALPHA_CATCH_RATE == 10

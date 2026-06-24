@@ -391,10 +391,8 @@ class BattlePanel(BaseOverlay):
         if self._movie is not None:
             self._movie.stop()
         self._current_dex = None  # so re-entering a battle restarts the sprite
-        if self._balls is not None:
-            self._balls.close()
-            self._balls = None
-        self.hide()
+        if self.isVisible():
+            self.hide()
 
     def _on_settings_click(self) -> None:
         if self.on_settings_click:

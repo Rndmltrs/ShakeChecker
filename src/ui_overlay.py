@@ -161,7 +161,7 @@ class BaseOverlay(QWidget):
         self._scale = 0.0
         self._panel_w = base_panel_w
         self._last_pos: tuple[int, int] | tuple[int, int, int] | None = None
-        self._click_through: bool | None = None
+
         self._manual_height: int | None = None
 
         self.on_mode_toggle: Callable[[], None] | None = None
@@ -218,15 +218,12 @@ class BaseOverlay(QWidget):
 
         self._col.addLayout(self._bar)
 
-        self._hover = QTimer(self)
-        self._hover.setInterval(40)
-        self._hover.timeout.connect(self._check_hover)
-
         self._resize_handle = ResizeHandle(self._on_drag_resize)
         self._main_layout.addWidget(self._resize_handle, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
     def _on_drag_resize(self, dy: int) -> None:
-        new_h = max(100, self.height() + int(dy))
+        min_safe_h = max(100, self.minimumSizeHint().height())
+        new_h = max(min_safe_h, self.height() + int(dy))
         self._manual_height = new_h
         self.setFixedHeight(new_h)
         # Re-apply docking to stay clamped if we grew downwards
@@ -263,31 +260,4 @@ class BaseOverlay(QWidget):
         lx, ly = phys_to_logical(x, top + DOCK_TOP_OFFSET)
         self.move(lx, ly)
 
-    def _check_hover(self) -> None:
-        if not self.isVisible():
-            return
-            
-        # If the user is currently holding the left mouse button, they might be dragging
-        # the resize handle or a scrollbar. Do not abruptly toggle click-through!
-        from PyQt6.QtGui import Qt, QGuiApplication
-        if QGuiApplication.mouseButtons() & Qt.MouseButton.LeftButton:
-            return
-            
-        over = self.frameGeometry().adjusted(-30, -30, 30, 30).contains(QCursor.pos())
-        self._apply_click_through(not over)
 
-    def _apply_click_through(self, on: bool) -> None:
-        if on == self._click_through:
-            return
-        self._click_through = on
-        hwnd = int(self.winId())
-        style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-        if on:
-            style |= win32con.WS_EX_TRANSPARENT
-        else:
-            style &= ~win32con.WS_EX_TRANSPARENT
-        win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, style)
-        win32gui.SetWindowPos(
-            hwnd, 0, 0, 0, 0, 0,
-            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED | win32con.SWP_NOACTIVATE
-        )

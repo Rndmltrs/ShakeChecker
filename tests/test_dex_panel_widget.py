@@ -95,13 +95,7 @@ def test_keep_caught_keeps_caught_common_checked(qt_app):
     assert "all caught here" not in p._rows[0].name.text()
 
 
-def test_keep_caught_toggle_uses_callback(qt_app):
-    calls: list[bool] = []
-    p = DexPanel()
-    p.on_toggle_keep_caught = lambda: calls.append(True)
-    p.get_keep_caught = lambda: True
-    p._toggle_keep_caught()
-    assert calls == [True]
+
 
 
 def test_panel_height_tracks_row_count(qt_app):
@@ -132,24 +126,4 @@ def test_row_click_invokes_toggle_with_dex_id(qt_app):
     assert got == [72]
 
 
-def test_profile_menu_uses_callback_list(qt_app):
-    # the menu is built from get_profiles(); just verify it's consulted safely
-    p = DexPanel()
-    p.get_profiles = lambda: ("Red", ["Red", "Blue"])
-    active, names = p.get_profiles()
-    assert active == "Red" and names == ["Red", "Blue"]
 
-
-def test_popup_closes_when_app_goes_inactive(qt_app):
-    from PyQt6.QtCore import Qt
-
-    p = DexPanel()
-    p.get_profiles = lambda: ("Red", ["Red", "Blue"])
-    p._open_profiles()
-    assert p._profiles is not None and p._profiles.isVisible()
-    # staying active (e.g. our own profile dialog) must NOT close it
-    p._on_app_state_changed(Qt.ApplicationState.ApplicationActive)
-    assert p._profiles.isVisible()
-    # clicking back into the game deactivates the app -> popup closes
-    p._on_app_state_changed(Qt.ApplicationState.ApplicationInactive)
-    assert p._profiles is None

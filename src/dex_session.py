@@ -37,12 +37,13 @@ class DexSession:
         self,
         data: EncounterData,
         caught: CaughtStore,
+        area_index: dict[str, str],
         period_fn: Callable[[], Period] = current_period,
         season_fn: Callable[[], int] = current_season,
     ) -> None:
         self._data = data
         self._caught = caught
-        self._resolver = RegionResolver(data)
+        self._resolver = RegionResolver(data, area_index)
         self._period_fn = period_fn
         self._season_fn = season_fn
         self._logged_unknowns: set[str] | None = None

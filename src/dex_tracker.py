@@ -183,10 +183,9 @@ class EncounterData:
     """Loads the vendored encounter + legendary data and answers location/missing
     queries. Read-only; safe to share."""
 
-    def __init__(self, locations: dict[str, dict], legendaries: set[int], area_index: dict[str, str]) -> None:
+    def __init__(self, locations: dict[str, dict], legendaries: set[int]) -> None:
         self._locations = locations
         self._legendaries = legendaries
-        self._area_index = area_index
         # normalized name -> [keys] (a name can repeat across regions)
         self._by_norm: dict[str, list[str]] = {}
         for key, loc in locations.items():
@@ -194,13 +193,11 @@ class EncounterData:
 
     @classmethod
     def load(
-        cls, encounters_path: Path | str, legendaries_path: Path | str, area_index_path: Path | str
+        cls, encounters_path: Path | str, legendaries_path: Path | str
     ) -> EncounterData:
         enc = json.loads(Path(encounters_path).read_text("utf-8"))["locations"]
         leg = set(json.loads(Path(legendaries_path).read_text("utf-8"))["ids"])
-        raw_idx = json.loads(Path(area_index_path).read_text("utf-8"))
-        area_idx = {loc: region for region, locs in raw_idx.items() for loc in locs}
-        return cls(enc, leg, area_idx)
+        return cls(enc, leg)
 
     def location_name(self, key: str) -> str:
         return self._locations[key]["name"]
@@ -284,8 +281,9 @@ class RegionResolver:
     towns aren't in the data and simply don't change the region.
     """
 
-    def __init__(self, data: EncounterData) -> None:
+    def __init__(self, data: EncounterData, area_index: dict[str, str]) -> None:
         self._data = data
+        self._area_index = area_index
         self.region: str | None = None
 
     def reset(self) -> None:
@@ -300,8 +298,8 @@ class RegionResolver:
         elif not regions:
             # Check the fallback dictionary for encounter-less towns.
             norm = _normalize(hud_name)
-            if norm in self._data._area_index:
-                self.region = self._data._area_index[norm].upper()
+            if norm in self._area_index:
+                self.region = self._area_index[norm].upper()
                 
         return self._data.match_location(hud_name, self.region)
 
@@ -313,7 +311,7 @@ class RegionResolver:
             return hud_name
             
         from rapidfuzz import process, fuzz
-        best_town = process.extractOne(norm, self._data._area_index.keys(), scorer=fuzz.ratio)
+        best_town = process.extractOne(norm, self._area_index.keys(), scorer=fuzz.ratio)
         if best_town and best_town[1] >= MATCH_THRESHOLD:
             return best_town[0].title()
             
@@ -328,4 +326,4 @@ class RegionResolver:
     def is_exact(self, hud_name: str) -> bool:
         """True if the normalized name exactly matches a known route or encounter-less town."""
         norm = _normalize(hud_name)
-        return norm in self._data._area_index or self._data.is_exact(hud_name)
+        return norm in self._area_index or self._data.is_exact(hud_name)

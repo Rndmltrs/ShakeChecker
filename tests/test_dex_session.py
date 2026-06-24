@@ -19,8 +19,11 @@ def data() -> EncounterData:
 
 
 def make_session(data, tmp_path, period=Period.DAY, season=0) -> DexSession:
+    import json
+    raw = json.loads((DATA / "area_index.json").read_text("utf-8"))
+    area_index = {loc: r for r, locs in raw.items() for loc in locs}
     caught = CaughtStore.for_account(tmp_path, "Tester")
-    return DexSession(data, caught, period_fn=lambda: period, season_fn=lambda: season)
+    return DexSession(data, caught, area_index, period_fn=lambda: period, season_fn=lambda: season)
 
 
 def uncaught_ids(view):
