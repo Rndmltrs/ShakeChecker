@@ -105,9 +105,6 @@ def unknown_ball_order(ball_names: list[str], hidden: set[str]) -> list[str]:
     return [n for n in ball_names if n not in hidden]
 
 
-
-
-
 class BattlePanel(BaseOverlay):
     def __init__(self, ball_names: list[str], loader: SpriteLoader | None = None) -> None:
         super().__init__(
@@ -372,7 +369,7 @@ class BattlePanel(BaseOverlay):
         self._balls_layout.activate()
         self._balls_container.adjustSize()
         content_h = self._balls_container.sizeHint().height()
-        
+
         if self._manual_height is not None:
             self._balls_container.setMinimumHeight(content_h)
             self._balls_container.setMaximumHeight(16777215)
@@ -383,7 +380,7 @@ class BattlePanel(BaseOverlay):
         self._col.activate()
         self._root.invalidate()
         self._root.activate()
-        
+
         if self._manual_height is None:
             self.setFixedHeight(self.sizeHint().height())
 

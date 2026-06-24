@@ -7,8 +7,8 @@ from collections.abc import Callable
 import win32api
 import win32con
 import win32gui
-from PyQt6.QtCore import Qt, QTimer, QPoint
-from PyQt6.QtGui import QCursor, QFont, QGuiApplication
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QGuiApplication
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 # Base (scale 1.0) sizes in logical px. apply_scale() multiplies these; 1.0 is the
@@ -98,6 +98,7 @@ def bring_overlay_above_game(widget: QWidget) -> None:
 
 class ResizeHandle(QWidget):
     """A small drag-handle pip at the bottom of the overlay for manual vertical resizing."""
+
     def __init__(self, on_drag: Callable[[int], None]):
         super().__init__()
         self.on_drag = on_drag
@@ -106,11 +107,11 @@ class ResizeHandle(QWidget):
         self.setObjectName("ResizeHandle")
         # Keep a comfortably large hit target, but slightly smaller than before
         self.setFixedSize(100, 20)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         self.pip = QFrame()
         self.pip.setFixedSize(32, 4)
         self.pip.setObjectName("Pip")
@@ -186,11 +187,11 @@ class BaseOverlay(QWidget):
         panel = QFrame()
         panel.setObjectName("panel")
         self._root.addWidget(panel)
-        
+
         self._main_layout = QVBoxLayout(panel)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.setSpacing(0)
-        
+
         self._col = QVBoxLayout()
         self._main_layout.addLayout(self._col)
 
@@ -219,7 +220,10 @@ class BaseOverlay(QWidget):
         self._col.addLayout(self._bar)
 
         self._resize_handle = ResizeHandle(self._on_drag_resize)
-        self._main_layout.addWidget(self._resize_handle, alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        self._main_layout.addWidget(
+            self._resize_handle,
+            alignment=Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+        )
 
     def _on_drag_resize(self, dy: int) -> None:
         min_safe_h = max(100, self.minimumSizeHint().height())
@@ -259,5 +263,3 @@ class BaseOverlay(QWidget):
         )
         lx, ly = phys_to_logical(x, top + DOCK_TOP_OFFSET)
         self.move(lx, ly)
-
-

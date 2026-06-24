@@ -121,7 +121,8 @@ TURN_DOWN_GUARD_S = 3.0
 # command menu not detected) is still corrected up to the real turn.
 BATTLE_START_GRACE_S = 3.0
 # IDLE state location OCR throttle. Location changes are relatively infrequent.
-# A lower interval increases UI responsiveness at the cost of slightly higher CPU usage while walking.
+# A lower interval increases UI responsiveness at the cost of slightly
+# higher CPU usage while walking.
 DEX_LOC_INTERVAL_S = 0.0
 # Don't hide the dex panel on a single failed location read: a garbled OCR or a
 # screen transition briefly makes the HUD unreadable. Keep the last good location
@@ -381,6 +382,7 @@ class LiveLoop:
         self.dex = dex  # None if the dex data couldn't be loaded
         self.dex_panel = dex_panel  # overworld "missing here" overlay
         from settings_panel import SettingsPanel
+
         self.settings_panel = SettingsPanel()
         self.balls = load_balls()
         self.settings = Settings.load(USERDATA)  # which balls the overlay shows
@@ -395,10 +397,12 @@ class LiveLoop:
         # while letting high-end rigs chew through OCR tasks instantly.
         # (Cap at 4 since the app rarely queues more than 3 simultaneous tasks).
         import os
+
         cores = os.cpu_count() or 4
         workers = max(1, min(4, cores - 2))
-        
+
         from concurrent.futures import ThreadPoolExecutor
+
         self.pool = ThreadPoolExecutor(max_workers=workers)
 
         self.state = AppState.WAITING
@@ -418,9 +422,13 @@ class LiveLoop:
         self.mode_override: str = "auto" if self.settings.auto_switch else "dex"
         if self.dex_panel is not None:
             self.dex_panel.on_mode_toggle = self._on_mode_toggle
-            self.dex_panel.on_settings_click = lambda anchor: self.settings_panel.show(mode="dex", anchor_pos=anchor)
-            
-        self.battle_panel.on_settings_click = lambda anchor: self.settings_panel.show(mode="battle", anchor_pos=anchor)
+            self.dex_panel.on_settings_click = lambda anchor: self.settings_panel.show(
+                mode="dex", anchor_pos=anchor
+            )
+
+        self.battle_panel.on_settings_click = lambda anchor: self.settings_panel.show(
+            mode="battle", anchor_pos=anchor
+        )
 
         self.battle_panel.on_mode_toggle = self._on_mode_toggle
         self.battle_panel.on_toggle_ball = self._toggle_ball
@@ -444,7 +452,7 @@ class LiveLoop:
         self._was_horde = False  # read_battle horde hint (read every tick, so init here)
         self._last_loc_check = 0.0  # last IDLE location OCR (throttle)
         self._dex_log = ""  # last printed dex panel text (console dedup)
-        
+
         if self.dex_panel is not None and self.dex is not None:
             self.dex_panel.on_toggle_caught = self._dex_toggle_caught
             self.dex_panel.get_keep_caught = lambda: self.settings.keep_caught
@@ -470,11 +478,18 @@ class LiveLoop:
     def start(self) -> None:
         log.info(f"ShakeChecker v{paths.APP_VERSION}")
         if self.species_override or self.status_override:
-            species_src = f"override {self.species_override['name']}" if self.species_override else "OCR from screen"
-            status_src = f"override {self.status_override}" if self.status_override else "from screen"
+            species_src = (
+                f"override {self.species_override['name']}"
+                if self.species_override
+                else "OCR from screen"
+            )
+            status_src = (
+                f"override {self.status_override}" if self.status_override else "from screen"
+            )
             log.info(f"override mode active - species: {species_src}, status: {status_src}")
         log.info("loading OCR neural networks...")
         import ocr_engine
+
         ocr_engine.preload()
         log.info("waiting for PokeMMO window...")
         QTimer.singleShot(0, self.step)
@@ -651,7 +666,7 @@ class LiveLoop:
         if in_battle:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
-                self._enter_battle(now)
+                self._enter_battle()
             self._battle_step(frame, reading, bt, client_rect, now)
         elif self.state is AppState.BATTLE and now - self.last_seen_battle <= grace:
             # In a battle but no battle signal this frame (animation gap). Log what
@@ -699,56 +714,55 @@ class LiveLoop:
         loc_future = getattr(self, "_loc_future", None)
         queued_frame = getattr(self, "_queued_loc_frame", None)
         if not in_battle and self.dex is not None:
-            import location_reader
             import cv2
+
+            import location_reader
 
             mask = location_reader.extract_location_mask(frame, self.cal.location)
             if mask is not None:
-                # Tolerate small pixel flickers (e.g. from background rain/snow passing the threshold)
-                # to prevent the OCR engine from looping infinitely. A real location change (text changing
-                # or banner sliding) will alter thousands of pixels.
+                # Tolerate small pixel flickers to prevent the OCR engine from looping infinitely.
+                # A real location change (text changing or banner sliding) will alter thousands
+                # of pixels.
                 def _mask_changed(m1, m2) -> bool:
                     if m1 is None or m2 is None:
                         return True
-                    
+
                     # Compute absolute difference between masks
                     diff = cv2.absdiff(m1, m2)
-                    
-                    # Instead of erosion (which mathematically destroys 1-pixel-thick fonts at low DPI),
-                    # we use a Gaussian blur to find DENSE clusters of differences. Scattered rain streaks 
-                    # and 1-pixel edge flickers will blur into very low intensity (< 50). A real character 
-                    # changing (like '4' to '5') creates a dense cluster of differences that will accumulate 
-                    # into high intensity (> 100) when blurred.
+
+                    # Instead of erosion (which destroys 1-pixel-thick fonts at low DPI),
+                    # we use a Gaussian blur to find DENSE clusters of differences. Scattered rain
+                    # and 1-pixel edge flickers will blur into very low intensity (< 50).
+                    # A real character changing creates a dense cluster of differences that will
+                    # accumulate into high intensity (> 100) when blurred.
                     blurred = cv2.GaussianBlur(diff, (5, 5), 0)
                     _, dense_diff = cv2.threshold(blurred, 100, 255, cv2.THRESH_BINARY)
-                    
+
                     # If any dense clusters survive the threshold, it's a real text change
-                    return np.count_nonzero(dense_diff) > 0
+                    return bool(np.count_nonzero(dense_diff) > 0)
 
                 if _mask_changed(mask, getattr(self, "_last_seen_mask", None)):
                     self._last_seen_mask = mask
                     self._mask_stable_since = now
 
                 changed = _mask_changed(mask, self._last_loc_mask)
-                
+
                 if not changed:
                     self._mask_changed_since = None
                 elif getattr(self, "_mask_changed_since", None) is None:
                     self._mask_changed_since = now
-                    
+
                 # Wait for the mask to be perfectly still for 0.4s (animation finished)
                 # to guarantee we only pass sharp images to the OCR engine.
                 is_stable = now - getattr(self, "_mask_stable_since", now) >= 0.4
-                
-                changed_since = getattr(self, "_mask_changed_since", None)
-                
+
                 # Only read when the mask is perfectly stable (camera stopped panning).
                 # Removing the 1.0s override completely stops it from triggering while running.
                 ready = is_stable
-                
+
                 if changed and ready and dex_due:
-                    # If the banner slid away or is completely empty, don't waste 4.5s running OCR on nothing.
-                    # This prevents the queue from jamming, ensuring the thread is completely free for the next route.
+                    # If the banner slid away or is completely empty, don't waste 4.5s running OCR.
+                    # This prevents queue jamming, ensuring the thread is free for the next route.
                     if np.count_nonzero(mask) < (mask.size * 0.005):
                         self._last_loc_mask = mask
                         self._mask_changed_since = None
@@ -760,7 +774,7 @@ class LiveLoop:
                             # in the background
                             from dex_session import LocationView
                             from game_time import Period
-    
+
                             dummy_view = LocationView(
                                 route="Reading location...",
                                 region="Please wait",
@@ -772,8 +786,10 @@ class LiveLoop:
                                 self.settings.dex_scale or scale_for_window(client_rect.height)
                             )
                             self.dex_panel.show_here(dummy_view)
-                            self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
-    
+                            self.dex_panel.dock_to(
+                                client_rect.left, client_rect.top, client_rect.width
+                            )
+
                         self._loc_future = self.pool.submit(
                             location_reader.read_location, frame.copy(), self.cal.location
                         )
@@ -781,7 +797,7 @@ class LiveLoop:
                         if self.dex_panel is not None:
                             self.dex_panel.set_loading(True)
                     else:
-                        # OCR is currently busy processing the previous location, but a NEW location 
+                        # OCR is currently busy processing the previous location, but a NEW location
                         # banner has appeared and stabilized! Take a snapshot of it right now before
                         # it vanishes, so we can process it the millisecond the thread frees up.
                         self._queued_loc_frame = frame.copy()
@@ -792,26 +808,29 @@ class LiveLoop:
                 if getattr(self, "_loc_future", None) is not None and self._loc_future.done():  # type: ignore[union-attr]
                     ocr_result = self._loc_future.result() if self._loc_future else ""
                     self._loc_future = None
-                    
+
                     if not _mask_changed(mask, getattr(self, "_pending_loc_mask", None)):
                         self._last_loc_mask = mask
                         self._last_loc_check = now
                         self._loc_ocr_raw = ocr_result
                     else:
                         # The screen changed while we were reading. If we have a queued snapshot,
-                        # this result is stale so discard it. If we don't have a snapshot, we might 
+                        # this result is stale so discard it. If we don't have a snapshot, we might
                         # be on an empty screen, so keep the result as our last known location.
                         if getattr(self, "_queued_loc_frame", None) is None:
                             self._loc_ocr_raw = ocr_result
                         self._last_loc_check = 0.0
 
                     # If we captured a snapshot of a missed banner, process it instantly!
-                    if getattr(self, "_queued_loc_frame", None) is not None:
+                    queued_frame = getattr(self, "_queued_loc_frame", None)
+                    queued_mask = getattr(self, "_queued_loc_mask", None)
+                    if queued_frame is not None and queued_mask is not None:
                         import location_reader
+
                         self._loc_future = self.pool.submit(
-                            location_reader.read_location, self._queued_loc_frame, self.cal.location
+                            location_reader.read_location, queued_frame, self.cal.location
                         )
-                        self._pending_loc_mask = self._queued_loc_mask
+                        self._pending_loc_mask = queued_mask
                         self._queued_loc_frame = None
                         self._queued_loc_mask = None
                         if self.dex_panel is not None:
@@ -819,13 +838,17 @@ class LiveLoop:
                     elif self.dex_panel is not None:
                         self.dex_panel.set_loading(False)
 
-                if self.mode_override == "dex" or (self.mode_override == "auto" and self.settings.auto_switch and self.state != AppState.BATTLE):
+                if self.mode_override == "dex" or (
+                    self.mode_override == "auto"
+                    and self.settings.auto_switch
+                    and self.state != AppState.BATTLE
+                ):
                     view = self._update_dex(self._loc_ocr_raw)
 
                     if not self._last_hud and getattr(self, "_loc_future", None) is not None:
                         # We are displaying the dummy view waiting for the very first location read;
-                        # don't hide it, and force the loading spinner to animate (since view is None
-                        # and show_here isn't being called every frame yet).
+                        # don't hide it, and force the loading spinner to animate.
+                        # (since view is None and show_here isn't being called every frame yet).
                         action = "keep"
                         if self.dex_panel is not None:
                             self.dex_panel.set_loading(True)
@@ -841,7 +864,9 @@ class LiveLoop:
                             )
                             if self.mode_override != "battle":
                                 self.dex_panel.show_here(view)
-                            self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+                            self.dex_panel.dock_to(
+                                client_rect.left, client_rect.top, client_rect.width
+                            )
                         elif action == "hide":  # several misses in a row -> truly left the area
                             self.dex_panel.hide_panel()
                         # "keep": a transient miss -> leave the last good panel on screen
@@ -958,10 +983,9 @@ class LiveLoop:
         # Poll BEFORE submit: consume any finished read first, then start the next
         # one. Throttled to 1.5s so background OCR doesn't burn CPU spinning.
         chat_turn = self.chat.poll()
-        if self.mode_override != "dex":
-            if now - getattr(self, "_last_chat_submit", 0.0) >= 1.5:
-                self.chat.submit(frame)
-                self._last_chat_submit = now
+        if self.mode_override != "dex" and now - getattr(self, "_last_chat_submit", 0.0) >= 1.5:
+            self.chat.submit(frame)
+            self._last_chat_submit = now
 
         if chat_turn is not None and chat_turn != self._last_chat_turn:
             self._last_chat_turn = chat_turn  # shows the chat IS read (dedup the log)
@@ -1047,7 +1071,9 @@ class LiveLoop:
                     self._update_single(frame, reading.bars[0], rect, is_trainer=self._is_trainer)
             else:
                 if self.mode_override != "dex":
-                    self.battle_panel.apply_scale(self.settings.battle_scale or scale_for_window(rect.height))
+                    self.battle_panel.apply_scale(
+                        self.settings.battle_scale or scale_for_window(rect.height)
+                    )
                     self.battle_panel.show_battle(
                         dex_id=0,
                         name="Reading battle...",
@@ -1090,7 +1116,9 @@ class LiveLoop:
 
         if is_trainer:
             if self.mode_override != "dex":
-                self.battle_panel.apply_scale(self.settings.battle_scale or scale_for_window(rect.height))
+                self.battle_panel.apply_scale(
+                    self.settings.battle_scale or scale_for_window(rect.height)
+                )
                 self.battle_panel.show_battle(
                     dex_id=0,
                     name="Trainer's Pokémon",
@@ -1152,7 +1180,9 @@ class LiveLoop:
         if self.cached is None:
             line = f"{'?':12.12s} HP {hp_pct:5.1f}% [{status}]  ({turn_note})"
             if self.mode_override != "dex":
-                self.battle_panel.apply_scale(self.settings.battle_scale or scale_for_window(rect.height))
+                self.battle_panel.apply_scale(
+                    self.settings.battle_scale or scale_for_window(rect.height)
+                )
                 self.battle_panel.show_battle(
                     dex_id=0,
                     name="Reading...",
@@ -1179,7 +1209,9 @@ class LiveLoop:
             )
             line = f"[{turn_note}] " + format_line(self.cached["name"], hp_pct, status, probs)
             if self.mode_override != "dex":
-                self.battle_panel.apply_scale(self.settings.battle_scale or scale_for_window(rect.height))
+                self.battle_panel.apply_scale(
+                    self.settings.battle_scale or scale_for_window(rect.height)
+                )
                 # Pass only known probabilities to the overlay; for an unknown rate
                 # this is empty and show_battle renders "??" from catch_rate=None.
                 overlay_probs = {name: p for name, p in probs if p is not None}
@@ -1208,15 +1240,18 @@ class LiveLoop:
         # Debounce OCR jitter (e.g. "Casteliacity" vs "Castelia City")
         if self._last_hud:
             import re
+
             from rapidfuzz import fuzz
 
             def extract_digits(s: str) -> tuple[str, ...]:
                 return tuple(re.findall(r"\d+", s))
 
-            if extract_digits(hud_name) == extract_digits(self._last_hud):
-                if fuzz.ratio(hud_name.lower(), self._last_hud.lower()) >= 75.0:
-                    if not self.dex.is_exact_location(hud_name):
-                        hud_name = self._last_hud
+            if (
+                extract_digits(hud_name) == extract_digits(self._last_hud)
+                and fuzz.ratio(hud_name.lower(), self._last_hud.lower()) >= 75.0
+                and not self.dex.is_exact_location(hud_name)
+            ):
+                hud_name = self._last_hud
 
         view = self.dex.on_location(hud_name)
         if view is not None:
@@ -1281,9 +1316,11 @@ class LiveLoop:
                 new_scale = self.settings.dex_scale or scale_for_window(client_rect.height)
                 self.dex_panel.apply_scale(new_scale)
                 self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
-        
+
         # Only refresh dex panel if it's supposed to be visible
-        if self.mode_override == "dex" or (self.mode_override == "auto" and self.state != AppState.BATTLE):
+        if self.mode_override == "dex" or (
+            self.mode_override == "auto" and self.state != AppState.BATTLE
+        ):
             self._refresh_dex_panel()
 
     def _set_battle_scale(self, scale: float | None) -> None:
@@ -1359,11 +1396,12 @@ def build_dex(account_override: str | None) -> DexSession | None:
         log.info("dex: encounters.json not found (run scripts/update_data.py) — dex disabled")
         return None
     data = EncounterData.load(ENCOUNTERS_PATH, LEGENDARIES_PATH)
-    
+
     import json
+
     raw_idx = json.loads(AREA_INDEX_PATH.read_text("utf-8"))
     area_index = {loc: region for region, locs in raw_idx.items() for loc in locs}
-    
+
     cfg = AccountConfig.load(USERDATA)
     account = cfg.resolve_active(account_override)
     if account is None:

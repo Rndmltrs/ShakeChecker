@@ -59,9 +59,6 @@ def test_unknown_ball_order_keeps_all_non_hidden_in_order():
     assert unknown_ball_order(names, {"Great"}) == ["Poke", "Ultra", "Net"]
 
 
-
-
-
 def test_scale_for_window_caps_at_one_and_floors():
     assert scale_for_window(REF_WINDOW_HEIGHT) == 1.0
     assert scale_for_window(REF_WINDOW_HEIGHT * 2) == 1.0  # never grows past 1.0

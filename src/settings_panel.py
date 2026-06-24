@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -21,8 +22,10 @@ from ui_components import create_popup_window
 if TYPE_CHECKING:
     pass
 
+
 class SettingsPanel:
     """Manages the global settings popup UI, fully decoupled from any specific overlay."""
+
     def __init__(self) -> None:
         # State accessors
         self.get_profiles: Callable[[], tuple[str | None, list[str]]] | None = None
@@ -32,11 +35,11 @@ class SettingsPanel:
         self.get_current_region: Callable[[], str | None] | None = None
         self.get_dex_scale: Callable[[], float | None] | None = None
         self.get_battle_scale: Callable[[], float | None] | None = None
-        
+
         # Mutators
         self.on_choose_profile: Callable[[str], None] | None = None
         self.on_remove_profile: Callable[[str], None] | None = None
-        self.on_create_profile: Callable[[], None] | None = None
+        self.on_create_profile: Callable[[str], None] | None = None
         self.on_toggle_keep_caught: Callable[[], None] | None = None
         self.on_toggle_auto_switch: Callable[[], None] | None = None
         self.on_toggle_click_to_catch: Callable[[], None] | None = None
@@ -59,7 +62,12 @@ class SettingsPanel:
             self._popup.close()
             self._popup = None
 
-    def show(self, mode: str = "dex", anchor_pos: QPoint | None = None, parent_widget: QWidget | None = None) -> None:
+    def show(
+        self,
+        mode: str = "dex",
+        anchor_pos: QPoint | None = None,
+        parent_widget: QWidget | None = None,
+    ) -> None:
         if self._popup is not None and self._popup.isVisible():
             if getattr(self, "_active_mode", None) == mode:
                 self.close()
@@ -90,7 +98,7 @@ class SettingsPanel:
 
     def _build_ui(self, box: QVBoxLayout) -> None:
         active, accounts = self.get_profiles() if self.get_profiles else (None, [])
-        
+
         head = QLabel("Profiles")
         head.setFont(self._font(12, bold=True))
         head.setObjectName("PrimaryText")
@@ -104,14 +112,14 @@ class SettingsPanel:
             sw.setCursor(Qt.CursorShape.PointingHandCursor)
             sw.setObjectName("LeftAlignBtn")
             sw.clicked.connect(lambda _=False, n=name: self._handle_choose_profile(n))
-            
+
             minus = QPushButton("−")
             minus.setFont(self._font(14, bold=True))
             minus.setCursor(Qt.CursorShape.PointingHandCursor)
             minus.setToolTip(f"Delete profile '{name}'")
             minus.setFixedWidth(20)
             minus.clicked.connect(lambda _=False, n=name: self._handle_remove_profile(n))
-            
+
             row.addWidget(sw, 1)
             row.addWidget(minus)
             cont = QWidget()
@@ -150,7 +158,10 @@ class SettingsPanel:
         auto_toggle.setFont(self._font(12))
         auto_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         auto_toggle.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        auto_toggle.setToolTip("Automatically switch to Battle Mode when a battle starts, and Dex Mode in the overworld.")
+        auto_toggle.setToolTip(
+            "Automatically switch to Battle Mode when a battle starts, "
+            "and Dex Mode in the overworld."
+        )
         auto_toggle.setObjectName("LeftAlignBtnChecked" if auto_switch else "LeftAlignBtnUnchecked")
         auto_toggle.clicked.connect(self._handle_toggle_auto_switch)
         box.addWidget(auto_toggle)
@@ -161,7 +172,9 @@ class SettingsPanel:
         click_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         click_toggle.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         click_toggle.setToolTip("Click a species in the list to manually toggle its caught status.")
-        click_toggle.setObjectName("LeftAlignBtnChecked" if click_to_catch else "LeftAlignBtnUnchecked")
+        click_toggle.setObjectName(
+            "LeftAlignBtnChecked" if click_to_catch else "LeftAlignBtnUnchecked"
+        )
         click_toggle.clicked.connect(self._handle_toggle_click_to_catch)
         box.addWidget(click_toggle)
 
@@ -184,7 +197,9 @@ class SettingsPanel:
             btn.setFont(self._font(12))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            is_active = (curr is not None and curr.lower() == reg.lower()) or (curr is None and reg == "Auto")
+            is_active = (curr is not None and curr.lower() == reg.lower()) or (
+                curr is None and reg == "Auto"
+            )
             btn.setObjectName("RegionBtn" if is_active else "RegionBtnInactive")
             btn.clicked.connect(lambda _=False, r=reg: self._handle_region_changed(r))
             reg_grid.addWidget(btn, i // 3, i % 3)
@@ -233,7 +248,11 @@ class SettingsPanel:
         scale_row.addWidget(self._scale_slider)
         box.addLayout(scale_row)
 
-        curr_scale = self.get_dex_scale() if mode == "dex" else self.get_battle_scale()
+        if mode == "dex":
+            curr_scale = self.get_dex_scale() if self.get_dex_scale else None
+        else:
+            curr_scale = self.get_battle_scale() if self.get_battle_scale else None
+
         if curr_scale is not None:
             self._scale_auto_cb.setChecked(False)
             self._scale_slider.setEnabled(True)
@@ -256,6 +275,7 @@ class SettingsPanel:
 
     def _handle_remove_profile(self, name: str) -> None:
         from PyQt6.QtWidgets import QMessageBox
+
         if self._popup is None:
             return
         ok = QMessageBox.question(
@@ -267,6 +287,7 @@ class SettingsPanel:
 
     def _handle_create_profile(self) -> None:
         from PyQt6.QtWidgets import QInputDialog
+
         if self._popup is None:
             return
         name, ok = QInputDialog.getText(self._popup, "New profile", "Account name:")

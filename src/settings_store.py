@@ -53,16 +53,16 @@ class Settings:
                 keep_caught = bool(raw.get("keep_caught", DEFAULT_KEEP_CAUGHT))
                 auto_switch = bool(raw.get("auto_switch", True))
                 click_to_catch = bool(raw.get("click_to_catch", True))
-                
+
                 old_ps = raw.get("panel_scale")
                 d_ps = raw.get("dex_scale")
                 b_ps = raw.get("battle_scale")
-                
+
                 if d_ps is not None:
                     dex_scale = float(d_ps)
                 elif old_ps is not None:
                     dex_scale = float(old_ps)
-                    
+
                 if b_ps is not None:
                     battle_scale = float(b_ps)
                 elif old_ps is not None:

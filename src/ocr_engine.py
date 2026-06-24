@@ -2,47 +2,50 @@
 
 from __future__ import annotations
 
+import csv
+import time
+from pathlib import Path
+
 import numpy as np
 
 _ocr_det = None
 _ocr_no_det = None
 
+
 def _engine_det():
     global _ocr_det
     if _ocr_det is None:
         from rapidocr_onnxruntime import RapidOCR
+
         _ocr_det = RapidOCR(
-            use_angle_cls=False,
-            print_verbose=False,
-            intra_op_num_threads=1,
-            inter_op_num_threads=1
+            use_angle_cls=False, print_verbose=False, intra_op_num_threads=1, inter_op_num_threads=1
         )
     return _ocr_det
+
 
 def _engine_no_det():
     global _ocr_no_det
     if _ocr_no_det is None:
         from rapidocr_onnxruntime import RapidOCR
+
         _ocr_no_det = RapidOCR(
             use_det=False,
             use_angle_cls=False,
             print_verbose=False,
             intra_op_num_threads=1,
-            inter_op_num_threads=1
+            inter_op_num_threads=1,
         )
     return _ocr_no_det
 
+
 def preload() -> None:
-    """Initialize both engines immediately so the ONNX C++ constructor doesn't lock the GIL mid-game."""
+    """Initialize engines immediately so ONNX C++ doesn't lock the GIL mid-game."""
     _engine_det()
     _engine_no_det()
 
 
-import csv
-import time
-from pathlib import Path
-
 _csv_path = Path("hidden/ocr_performance.csv")
+
 
 def _log_performance(task: str, duration: float, size: tuple[int, ...]):
     try:

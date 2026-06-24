@@ -183,6 +183,7 @@ def test_display_order_keep_caught_lists_all_caught_by_id():
 def data() -> EncounterData:
     return EncounterData.load(ENCOUNTERS, LEGENDARIES)
 
+
 def test_real_data_loads():
     d = EncounterData.load(ENCOUNTERS, LEGENDARIES)
     assert d.location_name("KANTO_VIRIDIAN_FOREST") == "VIRIDIAN FOREST"

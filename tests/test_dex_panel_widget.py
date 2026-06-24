@@ -95,9 +95,6 @@ def test_keep_caught_keeps_caught_common_checked(qt_app):
     assert "all caught here" not in p._rows[0].name.text()
 
 
-
-
-
 def test_panel_height_tracks_row_count(qt_app):
     # The scroll viewport grows with more rows and shrinks back to the same height
     # for the same content (e.g. after toggling "show caught" off). The live "stays
@@ -124,6 +121,3 @@ def test_row_click_invokes_toggle_with_dex_id(qt_app):
     assert got == [72]
     p._row_clicked(4)  # an empty/hidden row -> no species -> no callback
     assert got == [72]
-
-
-

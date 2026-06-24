@@ -568,7 +568,7 @@ def is_trainer_battle(frame_bgr: np.ndarray, bar: BarReading, cal: TrainerCalibr
     if strip.size == 0:
         return False
     gray = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY)
-    # Apply a Gaussian blur to wash out 1-pixel-thick rain/snow streaks. 
+    # Apply a Gaussian blur to wash out 1-pixel-thick rain/snow streaks.
     # Real trainer icons are dense and multi-pixel, so their edges survive the blur.
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
     edges = cv2.Canny(gray, 50, 150)

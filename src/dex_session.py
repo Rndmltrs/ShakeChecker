@@ -78,10 +78,8 @@ class DexSession:
                 clean_name = hud_name.strip().title()
                 if not self.is_exact_location(clean_name):
                     self._log_unknown(clean_name)
-                    
-                return LocationView(
-                    clean_name, self.region or "Unknown", period, season, []
-                )
+
+                return LocationView(clean_name, self.region or "Unknown", period, season, [])
             return None
         entries = self._data.entries_here(key, period.value, season, self._caught.caught)
         loc = self._data.location_for_key(key)
@@ -104,19 +102,20 @@ class DexSession:
     def _log_unknown(self, name: str) -> None:
         """Log genuinely unknown locations to a file so the user can review them."""
         import os
+
         log_path = "hidden/locations.log"
-        
+
         # Load existing logs on first use to prevent duplicates across app restarts
         if self._logged_unknowns is None:
             self._logged_unknowns = set()
             if os.path.exists(log_path):
-                with open(log_path, "r", encoding="utf-8") as f:
+                with open(log_path, encoding="utf-8") as f:
                     for line in f:
                         self._logged_unknowns.add(line.strip())
 
         if name in self._logged_unknowns:
             return
-            
+
         self._logged_unknowns.add(name)
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as f:

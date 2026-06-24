@@ -51,15 +51,15 @@ def clean_location(raw: str) -> str:
     channel suffix, or stray edges."""
     s = _TITLE_PREFIX.sub("", raw.strip())
     cleaned = _CH_SUFFIX.sub("", s).strip(" .|")
-    
+
     # PokeMMO's main menu displays "Loaded ROMs" in the top left.
     # We override it to display the app name instead.
     if "load" in cleaned.lower():
         return "ShakeChecker"
-        
+
     # Prevent OCR from dropping the space before a number (e.g. "Route4" -> "Route 4")
-    cleaned = re.sub(r'([a-zA-Z])(\d)', r'\1 \2', cleaned)
-        
+    cleaned = re.sub(r"([a-zA-Z])(\d)", r"\1 \2", cleaned)
+
     return cleaned
 
 
@@ -97,15 +97,14 @@ def read_location(frame_bgr: np.ndarray, cal: LocationCalibration) -> str:
     crop = frame_bgr[int(h * cal.top) : int(h * cal.bottom), int(w * cal.left) : int(w * cal.right)]
     if crop.size == 0:
         return ""
-        
+
     # RapidOCR's detection model (DBNet) and recognition model (CRNN) both
     # target ~48px height natively. By forcing the image to exactly 48px tall,
-    # we cut the pixel count massively and speed up DBNet by 500%, while 
+    # we cut the pixel count massively and speed up DBNet by 500%, while
     # preserving the beautiful natural anti-aliasing of the game engine so
     # the recognizer never hallucinates on jagged binary pixels.
     scale = 48.0 / crop.shape[0]
     up = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    
-    from ocr_engine import run_ocr
+
     texts = run_ocr(up, task_name="location")
     return clean_location(" ".join(texts)) if texts else ""

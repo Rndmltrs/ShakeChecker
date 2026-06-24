@@ -24,13 +24,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6.QtCore import QPoint, QSize, Qt
-from PyQt6.QtGui import QCursor, QFont, QFontMetrics, QIcon
+from PyQt6.QtGui import QFont, QFontMetrics, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
-    QInputDialog,
     QLabel,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -95,7 +93,6 @@ class DexPanel(BaseOverlay):
         self._legend: QWidget | None = None
         self._profiles: QWidget | None = None  # profile management popup
         self._rows: list[DexSpeciesRow] = []  # reused row-widget pool, grown as needed
-        import PyQt6.QtWidgets as QtWidgets
 
         self.on_settings_click: Callable[[QPoint], None] | None = None
         self._settings_btn.clicked.connect(self._on_settings_click)
@@ -110,7 +107,6 @@ class DexPanel(BaseOverlay):
         self.on_toggle_caught: Callable[[int], None] | None = None
         self.get_keep_caught: Callable[[], bool] | None = None
         self.get_click_to_catch: Callable[[], bool] | None = None
-
 
         self._init_dex()
 
@@ -213,17 +209,18 @@ class DexPanel(BaseOverlay):
         keep_caught = self.get_keep_caught() if self.get_keep_caught is not None else True
         entries = display_order(view.entries, keep_caught=keep_caught)
         needed = sum(1 for e in view.entries if not e.caught)
-        
+
         title_text = view.route if view.route == "ShakeChecker" else view.route.title()
         self._current_title_text = title_text
         if getattr(self, "_is_loading", False):
             import time
+
             spinners = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
             spinner = spinners[int(time.time() * 15) % len(spinners)]
             self._title.setText(f"{title_text} <span style='color:#888;'>{spinner}</span>")
         else:
             self._title.setText(title_text)
-        
+
         if view.route == "ShakeChecker":
             self._subtitle.setText(view.region.title())
         else:
@@ -277,6 +274,7 @@ class DexPanel(BaseOverlay):
         title = getattr(self, "_current_title_text", self._title.text())
         if is_loading:
             import time
+
             spinners = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
             spinner = spinners[int(time.time() * 15) % len(spinners)]
             self._title.setText(f"{title} <span style='color:#888;'>{spinner}</span>")
@@ -325,8 +323,6 @@ class DexPanel(BaseOverlay):
         if pos != self._last_pos:
             self._last_pos = pos
             self.move(*pos)
-
-
 
     def _row_clicked(self, index: int) -> None:
         if self.get_click_to_catch is not None and not self.get_click_to_catch():

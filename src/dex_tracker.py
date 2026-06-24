@@ -192,9 +192,7 @@ class EncounterData:
             self._by_norm.setdefault(_normalize(loc["name"]), []).append(key)
 
     @classmethod
-    def load(
-        cls, encounters_path: Path | str, legendaries_path: Path | str
-    ) -> EncounterData:
+    def load(cls, encounters_path: Path | str, legendaries_path: Path | str) -> EncounterData:
         enc = json.loads(Path(encounters_path).read_text("utf-8"))["locations"]
         leg = set(json.loads(Path(legendaries_path).read_text("utf-8"))["ids"])
         return cls(enc, leg)
@@ -300,7 +298,7 @@ class RegionResolver:
             norm = _normalize(hud_name)
             if norm in self._area_index:
                 self.region = self._area_index[norm].upper()
-                
+
         return self._data.match_location(hud_name, self.region)
 
     def correct_name(self, hud_name: str) -> str:
@@ -309,18 +307,19 @@ class RegionResolver:
         norm = _normalize(hud_name)
         if not norm or self.is_exact(hud_name):
             return hud_name
-            
-        from rapidfuzz import process, fuzz
+
+        from rapidfuzz import fuzz, process
+
         best_town = process.extractOne(norm, self._area_index.keys(), scorer=fuzz.ratio)
         if best_town and best_town[1] >= MATCH_THRESHOLD:
             return best_town[0].title()
-            
+
         # Try routes using the digits-restricted fuzzy match
         keys = self._data._candidate_keys(norm, self.region.upper() if self.region else None)
         if len(keys) == 1:
             loc = self._data._locations[keys[0]]
             return loc["name"]
-            
+
         return hud_name
 
     def is_exact(self, hud_name: str) -> bool:

@@ -42,3 +42,7 @@ userdata/
 
 # Governance and AI files
 hidden/
+
+# Local custom Launcher
+launcher.ps1
+.launcher_history.txt

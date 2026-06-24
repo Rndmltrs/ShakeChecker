@@ -7,10 +7,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QFontMetrics, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -180,8 +178,8 @@ def create_popup_window(
     w = QWidget(parent_widget)
     w.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     w.setWindowFlags(
-        Qt.WindowType.FramelessWindowHint 
-        | Qt.WindowType.Tool 
+        Qt.WindowType.FramelessWindowHint
+        | Qt.WindowType.Tool
         | Qt.WindowType.WindowDoesNotAcceptFocus
     )
     w.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -211,6 +209,3 @@ def build_legend(panel: DexPanel, parent_widget: QWidget | None = None) -> QWidg
         lab.setFont(panel._font(12))
         box.addWidget(lab)
     return w
-
-
-
