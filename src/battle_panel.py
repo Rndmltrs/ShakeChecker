@@ -21,9 +21,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6.QtCore import QPoint, QSize, Qt
-from PyQt6.QtGui import QIcon, QMovie
+from PyQt6.QtGui import QColor, QIcon, QMovie
 from PyQt6.QtWidgets import (
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -58,6 +59,7 @@ BASE_MARGIN_X = 12
 BASE_MARGIN_Y = 10
 BASE_COL_SPACING = 3
 BASE_HEADER_SPACING = 8
+BASE_GLOW_BLUR = 14
 BASE_ROW_SPACING = 6
 BASE_PCT_MINW = 48
 
@@ -103,11 +105,7 @@ def unknown_ball_order(ball_names: list[str], hidden: set[str]) -> list[str]:
     return [n for n in ball_names if n not in hidden]
 
 
-def sprite_bg_style(alpha: bool) -> str:
-    """Stylesheet for the header sprite label. An Alpha Pokémon (PokeMMO draws
-    alphas with a red outline) gets a translucent red tile behind the sprite;
-    a normal encounter gets no background."""
-    return "background: rgba(200,40,40,170); border-radius: 6px;" if alpha else ""
+
 
 
 class BattlePanel(BaseOverlay):
@@ -151,6 +149,12 @@ class BattlePanel(BaseOverlay):
         self._header = QHBoxLayout()
         self._sprite = QLabel()
         self._sprite.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        # Red glow/aura behind the sprite to mark an Alpha Pokémon
+        self._alpha_glow = QGraphicsDropShadowEffect(self)
+        self._alpha_glow.setOffset(0, 0)
+        self._alpha_glow.setColor(QColor(235, 45, 45))
+        self._sprite.setGraphicsEffect(self._alpha_glow)
+        self._alpha_glow.setEnabled(False)
         self._name = QLabel(" ")
         self._name.setTextFormat(Qt.TextFormat.RichText)  # bold name + small "Lv.N"
         # Ignored width: a long name clips instead of widening the panel.
@@ -238,6 +242,7 @@ class BattlePanel(BaseOverlay):
         self._mode_label.setFont(self._font(px(13), bold=True))
 
         self._sprite.setFixedHeight(self._sprite_h)
+        self._alpha_glow.setBlurRadius(px(BASE_GLOW_BLUR))
         ball_h = px(BASE_BALL_H)
         pct_minw = px(BASE_PCT_MINW)
         row_spacing = px(BASE_ROW_SPACING)
@@ -297,7 +302,7 @@ class BattlePanel(BaseOverlay):
         `alpha` draws a red tile behind the sprite to mark an Alpha Pokémon."""
         unknown = catch_rate is None
         self._set_sprite(dex_id)
-        self._sprite.setStyleSheet(sprite_bg_style(alpha))
+        self._alpha_glow.setEnabled(alpha)  # red aura marks an Alpha Pokémon
         lvl = (
             f' <span style="font-size:{self._level_px}px; color:#9aa0aa;">Lv.{level}</span>'
             if level

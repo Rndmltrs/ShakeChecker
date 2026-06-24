@@ -115,6 +115,11 @@ MENU_STABLE_FRAMES = 2
 # menu hasn't advanced for this long, so a stale async read right after a real
 # turn advance can't briefly drag the count down.
 TURN_DOWN_GUARD_S = 3.0
+# Right after a battle starts, the previous battle's last "Turn N" can still be
+# in-flight from the async chat OCR. Ignore a turn-1 chat reading only within this
+# window; after it, trust the chat even from turn 1 so a stuck menu counter (e.g.
+# command menu not detected) is still corrected up to the real turn.
+BATTLE_START_GRACE_S = 3.0
 # IDLE state location OCR throttle. Location changes are relatively infrequent.
 # A lower interval increases UI responsiveness at the cost of slightly higher CPU usage while walking.
 DEX_LOC_INTERVAL_S = 0.0
@@ -646,8 +651,22 @@ class LiveLoop:
         if in_battle:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
-                self._enter_battle()
+                self._enter_battle(now)
             self._battle_step(frame, reading, bt, client_rect, now)
+        elif self.state is AppState.BATTLE and now - self.last_seen_battle <= grace:
+            # In a battle but no battle signal this frame (animation gap). Log what
+            # dropped out so a false "battle ended" can be diagnosed: which signal
+            # is missing and whether ui_present held the grace at the longer value.
+            log.debug(
+                "battle gap: ui=%s state=%s menu=%s action=%s caught=%s grace=%.1f since=%.2f",
+                ui_present,
+                reading.state.name,
+                bt.menu_present,
+                bt.action,
+                bt.caught,
+                grace,
+                now - self.last_seen_battle,
+            )
         elif self.state is AppState.BATTLE and now - self.last_seen_battle > grace:
             self.state = AppState.IDLE
             self.last_line = ""
@@ -954,6 +973,8 @@ class LiveLoop:
             now=now,
             last_advance=self._last_advance,
             down_guard_s=TURN_DOWN_GUARD_S,
+            battle_start=getattr(self, "_battle_start", 0.0),
+            start_grace_s=BATTLE_START_GRACE_S,
         )
         if outcome in ("down", "up"):  # the formatter prefixes '[dbg]' only when --debug
             shown = self.turns.turns_completed + 1

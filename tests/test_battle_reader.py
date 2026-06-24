@@ -203,6 +203,9 @@ def test_double_status_not_broken_by_horde_logic():
         # rain: diagonal streaks under the bar push edge density into the trainer
         # range (0.0095), but they aren't compact icon blobs -> still wild.
         ("rain_wild_encounter.png", False),
+        ("rain_wild_encounter_2.png", False),
+        ("rain_wild_encounter_3.png", False),
+        ("rain_wild_encounter_4.png", False),
     ],
 )
 def test_trainer_battle_detection(name, is_trainer):
