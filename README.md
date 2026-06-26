@@ -1,7 +1,6 @@
 # ShakeChecker — Fork Notice
 
-This repository is a **personal fork** of the original  
-[ghostpixxel/ShakeChecker](https://github.com/ghostpixxel/ShakeChecker) project.
+This repository is a **personal fork** of the original [ghostpixxel/ShakeChecker](https://github.com/ghostpixxel/ShakeChecker) project.
 
 All credit for the concept, design, implementation, and research behind
 ShakeChecker belongs entirely to **ghostpixxel**.  
