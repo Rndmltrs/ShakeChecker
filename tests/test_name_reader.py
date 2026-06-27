@@ -12,8 +12,8 @@ from pathlib import Path
 import cv2
 import pytest
 
-from battle_reader import load_calibration, read_enemy_bars
-from name_reader import (
+from battle.battle_reader import load_calibration, read_enemy_bars
+from battle.name_reader import (
     ALPHA_CATCH_RATE,
     NameReader,
     clean_ocr_text,
@@ -24,8 +24,8 @@ from name_reader import (
 )
 
 ROOT = Path(__file__).parent.parent
-FIXTURES = ROOT / "fixtures"
-SPECIES_PATH = ROOT / "src" / "data" / "species_core.json"
+FIXTURES = ROOT / "tests" / "fixtures"
+SPECIES_PATH = ROOT / "data" / "species_core.json"
 CAL = load_calibration(ROOT / "calibration.toml")
 NAMES = [s["name"] for s in json.loads(SPECIES_PATH.read_text("utf-8"))]
 
@@ -137,3 +137,4 @@ def test_ocr_reads_alpha_with_fixed_rate(name_reader, fixture):
     assert species["id"] == 164  # base Noctowl drives the sprite/dex record
     assert species["alpha"] is True
     assert species["catch_rate"] == ALPHA_CATCH_RATE == 10
+

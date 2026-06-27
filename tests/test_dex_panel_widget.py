@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from dex_panel import DexPanel
-from dex_session import LocationView
-from dex_tracker import DexEntry
-from game_time import Period
-from ui_theme import rarity_color_hex
+from ui.dex_panel import DexPanel
+from dex.dex_session import LocationView
+from dex.dex_tracker import DexEntry
+from core.game_time import Period
+from ui.ui_theme import rarity_color_hex
 
 # --- pure helper ---
 
@@ -121,3 +121,4 @@ def test_row_click_invokes_toggle_with_dex_id(qt_app):
     assert got == [72]
     p._row_clicked(4)  # an empty/hidden row -> no species -> no callback
     assert got == [72]
+

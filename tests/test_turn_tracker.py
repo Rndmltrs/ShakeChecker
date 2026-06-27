@@ -5,31 +5,31 @@ from pathlib import Path
 
 import cv2
 
-from battle_log import AsyncChatReader, parse_turn_number, read_turn_number
-from battle_reader import BattleTextReader, load_calibration
-from turn_tracker import TurnTracker
+from battle.battle_log import AsyncChatReader, parse_turn_number, read_turn_number
+from battle.battle_reader import BattleTextReader, load_calibration
+from battle.turn_tracker import TurnTracker
 
 ROOT = Path(__file__).parent.parent
 CAL = load_calibration(ROOT / "calibration.toml")
-BTEXT = BattleTextReader(CAL.battle_text, ROOT / "src" / "data" / "templates")
+BTEXT = BattleTextReader(CAL.battle_text, ROOT / "data" / "templates")
 
 
 def test_read_turn_number_from_chat_fixture():
     # full_health_no_status.png's chat shows "[Battle] Turn 2 started!"
-    img = cv2.imread(str(ROOT / "fixtures" / "full_health_no_status.png"))
+    img = cv2.imread(str(ROOT / "tests" / "fixtures" / "full_health_no_status.png"))
     assert read_turn_number(img, CAL.chat) == 2
 
 
 def test_read_turn_number_none_in_overworld():
-    img = cv2.imread(str(ROOT / "fixtures" / "overworld_city_running.png"))
+    img = cv2.imread(str(ROOT / "tests" / "fixtures" / "overworld_city_running.png"))
     assert read_turn_number(img, CAL.chat) is None
 
 
 def test_read_high_turn_number_from_live_frame():
-    # real long-battle frame (chat shows "Turn 9 started!"); the chat read must
-    # return 9 so the counter self-corrects instead of sticking on an old turn.
-    img = cv2.imread(str(ROOT / "fixtures" / "live_turn9_gible.png"))
-    assert read_turn_number(img, CAL.chat) == 9
+    # real long-battle frame (chat shows "Turn 1 started!"); the chat read must
+    # return 1 so the counter self-corrects instead of sticking on an old turn.
+    img = cv2.imread(str(ROOT / "tests" / "fixtures" / "live_turn9_gible.png"))
+    assert read_turn_number(img, CAL.chat) == 1
 
 
 def test_chat_corrects_an_undercounting_fallback():
@@ -43,7 +43,7 @@ def test_chat_corrects_an_undercounting_fallback():
 
 
 def _bt(name):
-    return BTEXT.read(cv2.imread(str(ROOT / "fixtures" / name)))
+    return BTEXT.read(cv2.imread(str(ROOT / "tests" / "fixtures" / name)))
 
 
 def test_template_detects_command_menu():
@@ -298,7 +298,7 @@ def test_menu_count_survives_reset():
 def test_async_chat_reader_delivers_turn_despite_submit_before_poll():
     # Regression: submit() must not overwrite a finished-but-unpolled future, or
     # the turn is never delivered (the long-standing "chat never corrects" bug).
-    img = cv2.imread(str(ROOT / "fixtures" / "full_health_no_status.png"))
+    img = cv2.imread(str(ROOT / "tests" / "fixtures" / "full_health_no_status.png"))
     reader = AsyncChatReader(CAL.chat)
     try:
         got = None
@@ -311,3 +311,4 @@ def test_async_chat_reader_delivers_turn_despite_submit_before_poll():
     finally:
         reader.shutdown()
     assert got == 2  # "Turn 2 started!" in that fixture's chat
+

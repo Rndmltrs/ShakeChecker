@@ -23,11 +23,11 @@ const z = (y / 65536) * (y / 65536) * (y / 65536) * (y / 65536) * 100
 
 ## Table comparison
 
-- Ball rates in `src/data/balls.json` match the Hub list exactly
+- Ball rates in `data/balls.json` match the Hub list exactly
   (Poke 1, Great 1.5, Ultra 2, Heal 1.25, Net 3.5, Nest 4, Dusk 2.5, Quick 5,
   Timer 4, Repeat 2.5, Luxury 2, Dream 4; all flat, no conditions).
 - Status rates match: none 1, SLP 2, FRZ 2, PAR 1.5. PSN/BRN are absent from
-  the Hub list; `src/data/status_rates.json` carries them as 1.0 with an open
+  the Hub list; `data/status_rates.json` carries them as 1.0 with an open
   question marker (see CLAUDE.md).
 
 ## Spot checks (computed by `catch_calc.py`)
@@ -48,7 +48,7 @@ CLAUDE.md) and is pinned in `tests/test_catch_calc.py`.
 The Hub models every ball as a flat multiplier. PokeMMO actually applies
 conditions — verified against the PokeMMO Wiki and the PokeMMO-specific catch
 calculator `c4vv/CatchCalc` (`pokeballs.js`). Ported into `catch_calc.py`
-(`BALL_RULES`) / `src/data/balls.json`:
+(`BALL_RULES`) / `data/balls.json`:
 
 | Ball | Multiplier | Condition |
 |---|---|---|

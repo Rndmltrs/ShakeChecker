@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sprite_loader import (
+from ui.sprite_loader import (
     SPRITES_DIR,
     SpriteLoader,
     ball_slug,
@@ -98,3 +98,4 @@ def test_cache_returns_same_object(qt_app):
 
 def test_sprites_dir_points_at_vendored_assets():
     assert (SPRITES_DIR / "items" / "poke-ball.png").exists()
+

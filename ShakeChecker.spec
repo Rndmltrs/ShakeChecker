@@ -9,10 +9,10 @@
 from PyInstaller.utils.hooks import collect_all
 
 # Bundled read-only resources (must match paths.py: resource_root()/calibration.toml
-# and resource_root()/src/data).
+# and resource_root()/data).
 datas = [
     ("calibration.toml", "."),
-    ("src/data", "src/data"),
+    ("data", "data"),
 ]
 binaries = []
 hiddenimports = []

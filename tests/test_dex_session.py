@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from account_store import CaughtStore
-from dex_session import DexSession
-from dex_tracker import EncounterData
-from game_time import Period
+from core.account_store import CaughtStore
+from dex.dex_session import DexSession
+from dex.dex_tracker import EncounterData
+from core.game_time import Period
 
 ROOT = Path(__file__).parent.parent
-DATA = ROOT / "src" / "data"
+DATA = ROOT / "data"
 
 
 @pytest.fixture(scope="module")
@@ -79,3 +79,4 @@ def test_time_filtering_changes_the_view(data, tmp_path):
         make_session(data, tmp_path, Period.NIGHT, 0).on_location("Viridian Forest")
     )
     assert len(night) > len(day)
+

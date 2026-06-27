@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from battle_panel import (
+from ui.battle_panel import (
     BASE_PANEL_W,
     status_badge,
     subheader_text,
     unknown_ball_order,
     visible_ball_order,
 )
-from battle_panel import (
+from ui.battle_panel import (
     BattlePanel as Overlay,
 )
-from ui_overlay import MIN_SCALE, REF_WINDOW_HEIGHT, phys_to_logical, scale_for_window
-from ui_theme import prob_color_hex
+from ui.ui_overlay import MIN_SCALE, REF_WINDOW_HEIGHT, phys_to_logical, scale_for_window
+from ui.ui_theme import prob_color_hex
 
 # --- pure helpers (no Qt) ---
 
@@ -224,3 +224,4 @@ def test_phys_to_logical_scales_by_dpr(qt_app):
     dpr = qt_app.primaryScreen().devicePixelRatio()
     lx, ly = phys_to_logical(1000, 600)
     assert (lx, ly) == (round(1000 / dpr), round(600 / dpr))
+

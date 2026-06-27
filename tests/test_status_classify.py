@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from battle_reader import Status, classify_status_box, load_calibration
+from battle.battle_reader import Status, classify_status_box, load_calibration
 
 CAL = load_calibration(Path(__file__).parent.parent / "calibration.toml").status
 
@@ -61,3 +61,4 @@ def test_brn_red_extrapolated():
 
 def test_frz_cyan_extrapolated():
     assert classify_status_box(make_badge((92, 210, 220)), CAL) is Status.FRZ
+

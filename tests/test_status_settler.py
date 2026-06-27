@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from status_settler import StatusSettler
+from battle.status_settler import StatusSettler
 
 
 def test_first_reading_commits_immediately():
@@ -43,3 +43,4 @@ def test_reset_clears_state():
     s.update("psn")
     s.reset()
     assert s.update("slp") == "slp"  # next battle commits fresh
+

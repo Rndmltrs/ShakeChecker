@@ -13,6 +13,8 @@ import numpy as np
 
 from measure_fixture_hp import FIXTURES, find_bar_rows
 
+FIXTURES = ROOT / "tests" / "fixtures"
+
 TOTAL = 218
 
 

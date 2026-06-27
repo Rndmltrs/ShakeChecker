@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-import window_capture as wc
-from window_capture import WINDOW_TITLE, find_pokemmo_hwnd, fold_confusables, title_matches
+from core import window_capture as wc
+from core.window_capture import WINDOW_TITLE, find_pokemmo_hwnd, fold_confusables, title_matches
 
 # The PokeMMO client's homoglyph title: Cyrillic Р(U+0420) е(U+0435) М(U+041C)
 # mixed with ASCII o, k, M, O -> looks like "PokeMMO".
@@ -87,3 +87,4 @@ def test_match_without_client_rect_is_last_resort(monkeypatch):
     # minimized/unusable match (no rect) still beats no match at all
     install_fake_windows(monkeypatch, [(5, "PokeMMO")], {5: None})
     assert find_pokemmo_hwnd() == 5
+

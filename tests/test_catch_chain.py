@@ -1,4 +1,4 @@
-from catch_chain import CatchChain
+from battle.catch_chain import CatchChain
 
 
 def test_same_species_grows_the_chain():
@@ -44,3 +44,4 @@ def test_chain_survives_non_catch_encounters():
     # (a battle ends without a catch -- nothing is recorded)
     assert c.length_for(99) == 2
     assert c.record_catch(99) == 3
+

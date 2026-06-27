@@ -15,7 +15,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = ROOT / "tests" / "fixtures"
 OUT = FIXTURES / "_debug_crops"
 
 # HSV ranges (OpenCV: H 0-179)

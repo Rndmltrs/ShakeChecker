@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from catch_calc import BattleContext, ball_multiplier, catch_probability, x_value
+from battle.catch_calc import BattleContext, ball_multiplier, catch_probability, x_value
 
-DATA = Path(__file__).parent.parent / "src" / "data"
+DATA = Path(__file__).parent.parent / "data"
 BALL_LIST = json.loads((DATA / "balls.json").read_text("utf-8"))["balls"]
 BALLS_BY_ID = {b["id"]: b for b in BALL_LIST}
 # flat-rate balls only (conditional ones have no static rate)
@@ -166,3 +166,4 @@ def test_dusk_ball_condition():
 def test_unknown_rule_raises():
     with pytest.raises(ValueError):
         ball_multiplier({"id": "weird", "rule": "nonexistent"}, BattleContext())
+

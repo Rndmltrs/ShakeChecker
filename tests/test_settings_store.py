@@ -1,9 +1,9 @@
-from settings_store import Settings
+from core.settings_store import Settings
 
 
 def test_defaults_to_all_visible(tmp_path):
     s = Settings.load(tmp_path)
-    assert s.hidden_balls == set()
+    assert s.hidden_balls == {"timer"}
     assert s.is_ball_visible("poke")
 
 
@@ -12,25 +12,25 @@ def test_toggle_persists_and_reports_state(tmp_path):
     assert s.toggle_ball("net") is False  # now hidden
     assert not s.is_ball_visible("net")
     # reload from disk -> persisted
-    assert Settings.load(tmp_path).hidden_balls == {"net"}
+    assert Settings.load(tmp_path).hidden_balls == {"net", "timer"}
     assert s.toggle_ball("net") is True  # visible again
-    assert Settings.load(tmp_path).hidden_balls == set()
+    assert Settings.load(tmp_path).hidden_balls == {"timer"}
 
 
 def test_set_all(tmp_path):
     s = Settings.load(tmp_path)
     ids = ["poke", "great", "ultra"]
     s.set_all_balls(ids, visible=False)
-    assert s.hidden_balls == {"poke", "great", "ultra"}
+    assert s.hidden_balls == {"poke", "great", "ultra", "timer"}
     s.set_all_balls(["poke"], visible=True)
-    assert s.hidden_balls == {"great", "ultra"}
-    assert Settings.load(tmp_path).hidden_balls == {"great", "ultra"}
+    assert s.hidden_balls == {"great", "ultra", "timer"}
+    assert Settings.load(tmp_path).hidden_balls == {"great", "ultra", "timer"}
 
 
 def test_corrupt_file_falls_back(tmp_path):
     (tmp_path / "settings.json").write_text("{ not json", encoding="utf-8")
     s = Settings.load(tmp_path)
-    assert s.hidden_balls == set()  # no crash, all visible
+    assert s.hidden_balls == {"timer"}  # no crash, all visible except timer
     assert s.keep_caught is True  # default dex mode
 
 
@@ -44,3 +44,4 @@ def test_toggle_keep_caught_persists(tmp_path):
     assert Settings.load(tmp_path).keep_caught is False  # persisted
     assert s.toggle_keep_caught() is True
     assert Settings.load(tmp_path).keep_caught is True
+

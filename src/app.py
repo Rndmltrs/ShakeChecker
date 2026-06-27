@@ -34,10 +34,10 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
-import paths
-from account_store import AccountConfig, CaughtStore, delete_account_data
-from battle_log import AsyncChatReader, read_turn_number
-from battle_logic import (
+from core import paths
+from core.account_store import AccountConfig, CaughtStore, delete_account_data
+from battle.battle_log import AsyncChatReader, read_turn_number
+from battle.battle_logic import (
     apply_chat_turn,
     battle_end_grace,
     debounce_battle,
@@ -45,8 +45,8 @@ from battle_logic import (
     is_horde_remnant,
     is_in_battle,
 )
-from battle_panel import BattlePanel
-from battle_reader import (
+from ui.battle_panel import BattlePanel
+from battle.battle_reader import (
     BattleState,
     BattleText,
     BattleTextReader,
@@ -61,20 +61,20 @@ from battle_reader import (
     read_caught_icon,
 )
 from core.utils import parse_coord
-from catch_calc import BattleContext, ball_multiplier, catch_probability
-from catch_chain import CatchChain
-from dex_panel import DexPanel
-from dex_session import DexSession, LocationView
-from dex_tracker import EncounterData, select_display
-from game_time import current_game_minute, is_dusk_ball_night, season_name
-from hp_settler import HpSettler
-from location_reader import is_cave_location, read_location
-from name_reader import NameReader
-from settings_store import Settings
-from status_settler import StatusSettler
-from turn_tracker import TurnTracker
-from ui_overlay import scale_for_window
-from window_capture import (
+from battle.catch_calc import BattleContext, ball_multiplier, catch_probability
+from battle.catch_chain import CatchChain
+from ui.dex_panel import DexPanel
+from dex.dex_session import DexSession, LocationView
+from dex.dex_tracker import EncounterData, select_display
+from core.game_time import current_game_minute, is_dusk_ball_night, season_name
+from battle.hp_settler import HpSettler
+from dex.location_reader import is_cave_location, read_location
+from battle.name_reader import NameReader
+from core.settings_store import Settings
+from battle.status_settler import StatusSettler
+from battle.turn_tracker import TurnTracker
+from ui.ui_overlay import scale_for_window
+from core.window_capture import (
     WINDOW_TITLE,
     WindowCapture,
     find_pokemmo_hwnd,
@@ -383,7 +383,7 @@ class LiveLoop:
         self.battle_panel = battle_panel
         self.dex = dex  # None if the dex data couldn't be loaded
         self.dex_panel = dex_panel  # overworld "missing here" overlay
-        from settings_panel import SettingsPanel
+        from ui.settings_panel import SettingsPanel
 
         self.settings_panel = SettingsPanel()
         self.balls = load_balls()
@@ -494,7 +494,7 @@ class LiveLoop:
             )
             log.info(f"override mode active - species: {species_src}, status: {status_src}")
         log.info("loading OCR neural networks...")
-        import ocr_engine
+        from core import ocr_engine
 
         ocr_engine.preload()
         log.info("waiting for PokeMMO window...")
@@ -724,7 +724,7 @@ class LiveLoop:
 
         # Location
         try:
-            import location_reader
+            from dex import location_reader
 
             loc_raw = frame[ly0:ly1, lx0:lx1]
             if loc_raw.size > 0:
@@ -884,7 +884,7 @@ class LiveLoop:
             self._set_owner(self.dex_panel, self.hwnd)
 
             # Nudge panels above the game window once at startup
-            from ui_overlay import bring_overlay_above_game
+            from ui.ui_overlay import bring_overlay_above_game
 
             if self.battle_panel is not None:
                 bring_overlay_above_game(self.battle_panel)
@@ -970,7 +970,7 @@ class LiveLoop:
             )
             in_battle = self._stable_in_battle
         else:
-            from battle_reader import BattleReading, BattleState
+            from battle.battle_reader import BattleReading, BattleState
 
             reading = BattleReading(state=BattleState.NO_BATTLE, bars=(), is_horde=False)
             self._stable_in_battle, self._battle_debounce = debounce_battle(
@@ -1047,7 +1047,7 @@ class LiveLoop:
         if not in_battle and self.dex is not None:
             import cv2
 
-            import location_reader
+            from dex import location_reader
 
             mask = location_reader.extract_location_mask(frame, self.cal.location)
             if mask is not None:
@@ -1099,8 +1099,8 @@ class LiveLoop:
                         if not self._last_hud and self.dex_panel is not None:
                             # Show a placeholder UI while the very first location OCR finishes
                             # in the background
-                            from dex_session import LocationView
-                            from game_time import Period
+                            from dex.dex_session import LocationView
+                            from core.game_time import Period
 
                             dummy_view = LocationView(
                                 route="Reading location...",
@@ -1118,7 +1118,7 @@ class LiveLoop:
                             )
 
                         trigger_latency = now - getattr(self, "_last_loc_trigger", now)
-                        from ocr_engine import _log_performance
+                        from core.ocr_engine import _log_performance
 
                         _log_performance("location_trigger_latency", trigger_latency, (0, 0))
                         self._last_loc_trigger = now
@@ -1159,7 +1159,7 @@ class LiveLoop:
                     queued_mask = getattr(self, "_queued_loc_mask", None)
                     if queued_frame is not None and queued_mask is not None:
                         if now - self._last_loc_check >= DEX_LOC_INTERVAL_S:
-                            import location_reader
+                            from dex import location_reader
 
                             self._loc_future = self.loc_pool.submit(
                                 location_reader.read_location, queued_frame, self.cal.location
@@ -1295,7 +1295,7 @@ class LiveLoop:
             self._loc_read = True
             loc = self._loc_ocr_raw
             if loc:
-                from location_reader import is_cave_location
+                from dex.location_reader import is_cave_location
 
                 cave = is_cave_location(loc)
                 night = is_dusk_ball_night(current_game_minute())
@@ -1624,8 +1624,8 @@ class LiveLoop:
             return
         if not self._last_hud:
             if getattr(self, "_loc_future", None) is not None:
-                from dex_session import LocationView
-                from game_time import Period
+                from dex.dex_session import LocationView
+                from core.game_time import Period
 
                 dummy_view = LocationView(
                     route="Reading location...",
@@ -1940,3 +1940,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

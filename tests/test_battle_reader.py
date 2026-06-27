@@ -4,8 +4,8 @@ from pathlib import Path
 import cv2
 import pytest
 
-from battle_log import read_turn_number
-from battle_reader import (
+from battle.battle_log import read_turn_number
+from battle.battle_reader import (
     BattleState,
     is_battle_ui_present,
     is_trainer_battle,
@@ -14,7 +14,7 @@ from battle_reader import (
 )
 
 ROOT = Path(__file__).parent.parent
-FIXTURES = ROOT / "fixtures"
+FIXTURES = ROOT / "tests" / "fixtures"
 EXPECTED = json.loads((FIXTURES / "expected.json").read_text("utf-8"))
 META = EXPECTED["_meta"]
 CAL = load_calibration(ROOT / "calibration.toml")
@@ -214,3 +214,4 @@ def test_trainer_battle_detection(name, is_trainer):
     bars = read_battle(img, CAL).bars
     assert bars, name
     assert is_trainer_battle(img, bars[0], CAL.trainer) is is_trainer
+

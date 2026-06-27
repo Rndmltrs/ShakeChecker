@@ -13,10 +13,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from battle_reader import load_calibration, read_enemy_bars  # noqa: E402
+from battle.battle_reader import load_calibration, read_enemy_bars  # noqa: E402
 
 CAL = load_calibration(ROOT / "calibration.toml")
-FIX = ROOT / "fixtures"
+FIXTURES = ROOT / "tests" / "fixtures"
 OUT = ROOT / "scripts" / "_trainer_strips"
 OUT.mkdir(exist_ok=True)
 
@@ -88,3 +88,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

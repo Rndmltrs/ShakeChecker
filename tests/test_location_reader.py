@@ -5,11 +5,14 @@ from pathlib import Path
 import cv2
 import pytest
 
-from battle_reader import load_calibration
-from location_reader import clean_location, is_cave_location, read_location
+from battle.battle_reader import load_calibration
+from dex.location_reader import clean_location, is_cave_location, read_location
+import dex.location_reader
+
+dex.location_reader.OCR_THROTTLE_S = 0.0
 
 ROOT = Path(__file__).parent.parent
-FIXTURES = ROOT / "fixtures"
+FIXTURES = ROOT / "tests" / "fixtures"
 CAL = load_calibration(ROOT / "calibration.toml")
 
 

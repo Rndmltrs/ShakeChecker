@@ -26,7 +26,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "src" / "data"
+DATA = ROOT / "data"
 SPRITES = DATA / "sprites"
 POKEMON_DIR = SPRITES / "pokemon"
 ITEMS_DIR = SPRITES / "items"

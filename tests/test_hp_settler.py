@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hp_settler import HpSettler
+from battle.hp_settler import HpSettler
 
 
 def test_first_reading_passes_through():
@@ -50,3 +50,4 @@ def test_reset_clears_state():
     s.reset()
     assert s.settled is None
     assert s.update(42.0) == 42.0
+

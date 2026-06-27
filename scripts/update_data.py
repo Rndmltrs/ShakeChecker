@@ -1,7 +1,7 @@
 """Refresh the vendored encounter data from PokeMMOZone/PokeMMO-Data.
 
 Downloads `location-data.json` (PokeMMO-specific spawn tables -- NOT vanilla
-PokeAPI) and normalizes it into `src/data/encounters.json`, the file the dex
+PokeAPI) and normalizes it into `data/encounters.json`, the file the dex
 tracker reads. The source encodes time-of-day and season inside a single `time`
 string (e.g. "Day/Morning/SEASON0"); we parse that into explicit `periods` and
 `seasons` so the tracker can filter without re-parsing.
@@ -19,7 +19,7 @@ SOURCE_URL = (
     "https://raw.githubusercontent.com/PokeMMOZone/PokeMMO-Data/main/data/location-data.json"
 )
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "src" / "data"
+DATA = ROOT / "data"
 SPECIES_PATH = DATA / "species_core.json"
 OUT_PATH = DATA / "encounters.json"
 

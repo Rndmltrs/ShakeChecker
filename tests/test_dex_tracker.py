@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dex_tracker import (
+from dex.dex_tracker import (
     DexEntry,
     EncounterData,
     RegionResolver,
@@ -14,9 +14,9 @@ from dex_tracker import (
 )
 
 ROOT = Path(__file__).parent.parent
-ENCOUNTERS = ROOT / "src" / "data" / "encounters.json"
-LEGENDARIES = ROOT / "src" / "data" / "legendaries.json"
-AREA_INDEX = ROOT / "src" / "data" / "area_index.json"
+ENCOUNTERS = ROOT / "data" / "encounters.json"
+LEGENDARIES = ROOT / "data" / "legendaries.json"
+AREA_INDEX = ROOT / "data" / "area_index.json"
 
 
 def enc(
@@ -266,3 +266,4 @@ def test_entries_here_includes_caught_flagged(data):
     first = data.missing_here(key, "DAY", 0, caught=set())[0].id
     entries = data.entries_here(key, "DAY", 0, caught={first})
     assert next(e for e in entries if e.id == first).caught is True
+
