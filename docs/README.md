@@ -5,8 +5,7 @@ This repository is a **personal fork** of the original [ghostpixxel/ShakeChecker
 All credit for the concept, design, implementation, and research behind
 ShakeChecker belongs entirely to **ghostpixxel**.  
 This fork exists only for **personal development**, experimentation, and
-launcher improvements. Nothing here is intended to replace, compete with, or
-misrepresent the original project.
+launcher improvements.
 
 ---
 
@@ -26,8 +25,6 @@ Windows. It observes the game window during wild battles and displays:
 It never sends input, reads memory, injects code, or interacts with the game
 client in any way. It is strictly a visual overlay.
 
-The core ShakeChecker application code remains the work of the original author.
-
 If you are looking for the official version of ShakeChecker,  
 **please use the original repository linked above.**
 
@@ -37,6 +34,3 @@ If you are looking for the official version of ShakeChecker,
 
 ShakeChecker is licensed under the terms provided by the original author.  
 All original copyrights, trademarks, and credits remain with **ghostpixxel**.
-
-Any modifications in this fork are strictly additive and do not alter the
-ownership or authorship of the original project.
