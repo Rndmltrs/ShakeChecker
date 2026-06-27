@@ -137,4 +137,3 @@ def test_ocr_reads_alpha_with_fixed_rate(name_reader, fixture):
     assert species["id"] == 164  # base Noctowl drives the sprite/dex record
     assert species["alpha"] is True
     assert species["catch_rate"] == ALPHA_CATCH_RATE == 10
-

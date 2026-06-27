@@ -129,4 +129,3 @@ def test_caught_file_is_human_readable_sorted(tmp_path):
     store.add(1)
     data = json.loads(store.path.read_text("utf-8"))
     assert data == {"caught": [1, 16]}  # sorted, editable
-

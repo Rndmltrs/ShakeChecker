@@ -117,4 +117,3 @@ class SpriteLoader:
         painter.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "?")
         painter.end()
         return pm
-

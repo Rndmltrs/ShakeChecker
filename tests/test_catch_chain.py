@@ -44,4 +44,3 @@ def test_chain_survives_non_catch_encounters():
     # (a battle ends without a catch -- nothing is recorded)
     assert c.length_for(99) == 2
     assert c.record_catch(99) == 3
-

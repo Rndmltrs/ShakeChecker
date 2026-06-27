@@ -166,4 +166,3 @@ def test_dusk_ball_condition():
 def test_unknown_rule_raises():
     with pytest.raises(ValueError):
         ball_multiplier({"id": "weird", "rule": "nonexistent"}, BattleContext())
-

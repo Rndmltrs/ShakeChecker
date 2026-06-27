@@ -44,4 +44,3 @@ def test_toggle_keep_caught_persists(tmp_path):
     assert Settings.load(tmp_path).keep_caught is False  # persisted
     assert s.toggle_keep_caught() is True
     assert Settings.load(tmp_path).keep_caught is True
-

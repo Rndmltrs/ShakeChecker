@@ -36,7 +36,9 @@ src = ["src", "tests", "scripts"]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4"]
 
 [tool.mypy]
-files = ["src"]
+files = ["src", "scripts", "tests"]
+mypy_path = "src"
+explicit_package_bases = true
 python_version = "3.11"
 # Several deps ship no type stubs (mss, pywin32, rapidocr, rapidfuzz); don't fail
 # on their missing imports. Our own code is still checked, and the few unavoidable

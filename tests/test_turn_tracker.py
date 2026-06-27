@@ -311,4 +311,3 @@ def test_async_chat_reader_delivers_turn_despite_submit_before_poll():
     finally:
         reader.shutdown()
     assert got == 2  # "Turn 2 started!" in that fixture's chat
-

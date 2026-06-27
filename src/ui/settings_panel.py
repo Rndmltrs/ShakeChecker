@@ -358,4 +358,3 @@ class SettingsPanel:
         if self.on_dump_debug:
             self.on_dump_debug()
         self.close()
-

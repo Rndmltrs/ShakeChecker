@@ -13,8 +13,6 @@ import numpy as np
 
 from measure_fixture_hp import FIXTURES, find_bar_rows
 
-FIXTURES = ROOT / "tests" / "fixtures"
-
 TOTAL = 218
 
 
@@ -49,11 +47,13 @@ def fill_run(img: np.ndarray, y: int, x_hint: int) -> tuple[int, int, str] | Non
     return x0, x1, classify_hue(float(np.median(hues)))
 
 
-def main() -> None:
+def main() -> int:
     for png in sorted(FIXTURES.glob("*.png")):
         if png.name.startswith("overworld"):
             continue
         img = cv2.imread(str(png))
+        if img is None:
+            continue
         for y0, y1, bx0, _bx1 in find_bar_rows(img):
             y_mid = (y0 + y1) // 2
             r = fill_run(img, y_mid, bx0)
@@ -65,6 +65,7 @@ def main() -> None:
                 f"{png.name:48s} y={y_mid:3d} x0={x0:4d} x1={x1:4d} "
                 f"w={w:3d} fill={100 * w / TOTAL:5.1f}% {color}"
             )
+    return 0
 
 
 if __name__ == "__main__":

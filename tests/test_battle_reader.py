@@ -214,4 +214,3 @@ def test_trainer_battle_detection(name, is_trainer):
     bars = read_battle(img, CAL).bars
     assert bars, name
     assert is_trainer_battle(img, bars[0], CAL.trainer) is is_trainer
-

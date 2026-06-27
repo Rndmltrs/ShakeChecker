@@ -29,7 +29,7 @@ RED2 = ((170, 120, 120), (179, 255, 255))
 def color_mask(hsv: np.ndarray) -> np.ndarray:
     m = np.zeros(hsv.shape[:2], np.uint8)
     for lo, hi in (GREEN, YELLOW, RED1, RED2):
-        m |= cv2.inRange(hsv, np.array(lo), np.array(hi))
+        m = cv2.bitwise_or(m, cv2.inRange(hsv, np.array(lo), np.array(hi)))  # type: ignore[assignment]
     return m
 
 
@@ -42,7 +42,7 @@ def find_bar_rows(img: np.ndarray) -> list[tuple[int, int, int, int]]:
     m = color_mask(hsv)
     # close small gaps (bar gloss/shading)
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 9), np.uint8))
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(m, 8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(m, 8, cv2.CV_32S)  # type: ignore[call-overload]
     bars = []
     for i in range(1, n):
         x, y, bw, bh, area = stats[i]
@@ -59,11 +59,13 @@ def find_bar_rows(img: np.ndarray) -> list[tuple[int, int, int, int]]:
     return bars
 
 
-def main() -> None:
+def main() -> int:
     OUT.mkdir(exist_ok=True)
     results = {}
     for png in sorted(FIXTURES.glob("*.png")):
         img = cv2.imread(str(png))
+        if img is None:
+            continue
         bars = find_bar_rows(img)
         results[png.name] = bars
         for k, (y0, y1, x0, x1) in enumerate(bars):
@@ -74,6 +76,7 @@ def main() -> None:
             crop = cv2.resize(crop, None, fx=6, fy=6, interpolation=cv2.INTER_NEAREST)
             cv2.imwrite(str(OUT / f"{png.stem}_bar{k}.png"), crop)
     print(json.dumps(results, indent=1))
+    return 0
 
 
 if __name__ == "__main__":

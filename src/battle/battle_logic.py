@@ -130,4 +130,3 @@ def apply_chat_turn(
     # equal) AND keeps the consecutive-sleep counter in sync for the Dream Ball.
     tracker.observe(chat_turn, asleep)
     return "up" if tracker.turns_completed > before else "equal"
-

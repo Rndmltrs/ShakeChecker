@@ -36,12 +36,8 @@ from PyQt6.QtWidgets import (
 from ui.sprite_loader import SpriteLoader
 from ui.ui_components import BattleBallRow
 from ui.ui_overlay import (
-    DOCK_MARGIN,
-    DOCK_SIDE,
-    DOCK_TOP_OFFSET,
     MIN_SCALE,
     BaseOverlay,
-    phys_to_logical,
 )
 
 # Base (scale 1.0) sizes in logical px. apply_scale() multiplies these; 1.0 is the
@@ -437,6 +433,7 @@ class BattlePanel(BaseOverlay):
     def _build_balls(self, parent_widget: QWidget | None = None) -> QWidget:
         balls, hidden = self.get_ball_state() if self.get_ball_state else ([], set())
         from ui.ui_components import create_popup_window
+
         w, box = create_popup_window("balls", parent_widget)
         head = QLabel("Show balls")
         head.setFont(self._font(12, bold=True))
@@ -477,4 +474,3 @@ class BattlePanel(BaseOverlay):
         if self.on_set_all_balls is not None:
             self.on_set_all_balls(visible)
         self._open_balls()
-

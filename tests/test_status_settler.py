@@ -43,4 +43,3 @@ def test_reset_clears_state():
     s.update("psn")
     s.reset()
     assert s.update("slp") == "slp"  # next battle commits fresh
-

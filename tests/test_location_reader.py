@@ -5,9 +5,9 @@ from pathlib import Path
 import cv2
 import pytest
 
+import dex.location_reader
 from battle.battle_reader import load_calibration
 from dex.location_reader import clean_location, is_cave_location, read_location
-import dex.location_reader
 
 dex.location_reader.OCR_THROTTLE_S = 0.0
 

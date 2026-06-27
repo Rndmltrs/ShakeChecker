@@ -61,4 +61,3 @@ def test_brn_red_extrapolated():
 
 def test_frz_cyan_extrapolated():
     assert classify_status_box(make_badge((92, 210, 220)), CAL) is Status.FRZ
-

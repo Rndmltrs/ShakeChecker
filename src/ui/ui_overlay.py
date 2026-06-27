@@ -7,7 +7,7 @@ from collections.abc import Callable
 import win32api
 import win32con
 import win32gui
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QFont, QGuiApplication
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -268,9 +268,11 @@ class BaseOverlay(QWidget):
         return btn
 
     def _scale_icon_btn(self, btn: QPushButton, icon_name: str, isz: int) -> None:
-        from ui.ui_icons import icon_pixmap
-        from PyQt6.QtGui import QIcon
         from PyQt6.QtCore import QSize
+        from PyQt6.QtGui import QIcon
+
+        from ui.ui_icons import icon_pixmap
+
         btn.setIcon(QIcon(icon_pixmap(icon_name, isz, "#cfd2d6")))
         btn.setIconSize(QSize(isz, isz))
         btn.setFixedSize(isz + self._px(6), isz + self._px(6))
@@ -288,7 +290,7 @@ class BaseOverlay(QWidget):
         """Move the overlay to its docked position."""
         if getattr(self, "_drag_start", None) is not None:
             return  # user dragged it; leave it there
-            
+
         x = (
             left + client_w - self._panel_w - DOCK_MARGIN
             if DOCK_SIDE == "right"
@@ -296,8 +298,7 @@ class BaseOverlay(QWidget):
         )
         lx, ly = phys_to_logical(x, top + DOCK_TOP_OFFSET)
         pos = (lx, ly)
-        
+
         if self._last_pos != pos:
             self._last_pos = pos
             self.move(*pos)
-

@@ -266,4 +266,3 @@ def test_entries_here_includes_caught_flagged(data):
     first = data.missing_here(key, "DAY", 0, caught=set())[0].id
     entries = data.entries_here(key, "DAY", 0, caught={first})
     assert next(e for e in entries if e.id == first).caught is True
-

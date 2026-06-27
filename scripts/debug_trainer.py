@@ -50,7 +50,7 @@ def compact_blobs(strip_bgr: np.ndarray) -> int:
 def main() -> None:
     cal = CAL.trainer
     for name in NAMES:
-        p = FIX / name
+        p = FIXTURES / name
         frame = cv2.imread(str(p))
         if frame is None:
             print(f"{name:45} MISSING")
@@ -88,4 +88,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

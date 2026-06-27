@@ -17,8 +17,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from core.account_store import CaughtStore
-from dex.dex_tracker import DexEntry, EncounterData, RegionResolver
 from core.game_time import Period, current_period, current_season
+from dex.dex_tracker import DexEntry, EncounterData, RegionResolver
 
 
 @dataclass(frozen=True)
@@ -120,4 +120,3 @@ class DexSession:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"{name}\n")
-

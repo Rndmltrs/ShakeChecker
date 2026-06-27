@@ -209,4 +209,3 @@ def build_legend(panel: DexPanel, parent_widget: QWidget | None = None) -> QWidg
         lab.setFont(panel._font(12))
         box.addWidget(lab)
     return w
-

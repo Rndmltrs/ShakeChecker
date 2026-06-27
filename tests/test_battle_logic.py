@@ -18,7 +18,6 @@ ACTION = BattleText(menu_present=False, caught=False, action=True)
 CAUGHT = BattleText(menu_present=False, caught=True, action=False)
 
 
-
 # --- debounce_menu --------------------------------------------------------
 
 
@@ -260,4 +259,3 @@ def test_sleep_resets_when_awake():
         start_grace_s=3.0,
     )
     assert t.turns_asleep == 0  # awake -> Dream Ball back to x1 immediately
-

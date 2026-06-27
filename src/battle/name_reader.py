@@ -139,4 +139,3 @@ class NameReader:
             result["alpha"] = True
             result["catch_rate"] = ALPHA_CATCH_RATE
         return result
-

@@ -34,8 +34,6 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
-from core import paths
-from core.account_store import AccountConfig, CaughtStore, delete_account_data
 from battle.battle_log import AsyncChatReader, read_turn_number
 from battle.battle_logic import (
     apply_chat_turn,
@@ -45,14 +43,10 @@ from battle.battle_logic import (
     is_horde_remnant,
     is_in_battle,
 )
-from ui.battle_panel import BattlePanel
 from battle.battle_reader import (
     BattleState,
-    BattleText,
     BattleTextReader,
     Calibration,
-    ChatCalibration,
-    HpColor,
     Status,
     is_battle_ui_present,
     is_trainer_battle,
@@ -60,20 +54,17 @@ from battle.battle_reader import (
     read_battle,
     read_caught_icon,
 )
-from core.utils import parse_coord
 from battle.catch_calc import BattleContext, ball_multiplier, catch_probability
 from battle.catch_chain import CatchChain
-from ui.dex_panel import DexPanel
-from dex.dex_session import DexSession, LocationView
-from dex.dex_tracker import EncounterData, select_display
-from core.game_time import current_game_minute, is_dusk_ball_night, season_name
 from battle.hp_settler import HpSettler
-from dex.location_reader import is_cave_location, read_location
 from battle.name_reader import NameReader
-from core.settings_store import Settings
 from battle.status_settler import StatusSettler
 from battle.turn_tracker import TurnTracker
-from ui.ui_overlay import scale_for_window
+from core import paths
+from core.account_store import AccountConfig, CaughtStore, delete_account_data
+from core.game_time import current_game_minute, is_dusk_ball_night, season_name
+from core.settings_store import Settings
+from core.utils import parse_coord
 from core.window_capture import (
     WINDOW_TITLE,
     WindowCapture,
@@ -86,6 +77,12 @@ from core.window_capture import (
     set_dpi_awareness,
     title_matches,
 )
+from dex.dex_session import DexSession, LocationView
+from dex.dex_tracker import EncounterData, select_display
+from dex.location_reader import is_cave_location, read_location
+from ui.battle_panel import BattlePanel
+from ui.dex_panel import DexPanel
+from ui.ui_overlay import scale_for_window
 
 DATA = paths.DATA_DIR  # bundled, read-only (frozen-aware via paths.py)
 SPECIES_PATH = DATA / "species_core.json"
@@ -703,10 +700,18 @@ class LiveLoop:
             x = w - text_width - 20
 
             # Outline (stroke)
-            cv2.putText(annotated, text, (x-1, y-1), font, scale, (0, 0, 0), thickness+1, cv2.LINE_AA)
-            cv2.putText(annotated, text, (x+1, y-1), font, scale, (0, 0, 0), thickness+1, cv2.LINE_AA)
-            cv2.putText(annotated, text, (x-1, y+1), font, scale, (0, 0, 0), thickness+1, cv2.LINE_AA)
-            cv2.putText(annotated, text, (x+1, y+1), font, scale, (0, 0, 0), thickness+1, cv2.LINE_AA)
+            cv2.putText(
+                annotated, text, (x - 1, y - 1), font, scale, (0, 0, 0), thickness + 1, cv2.LINE_AA
+            )
+            cv2.putText(
+                annotated, text, (x + 1, y - 1), font, scale, (0, 0, 0), thickness + 1, cv2.LINE_AA
+            )
+            cv2.putText(
+                annotated, text, (x - 1, y + 1), font, scale, (0, 0, 0), thickness + 1, cv2.LINE_AA
+            )
+            cv2.putText(
+                annotated, text, (x + 1, y + 1), font, scale, (0, 0, 0), thickness + 1, cv2.LINE_AA
+            )
 
             # Main text
             cv2.putText(annotated, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
@@ -1099,8 +1104,8 @@ class LiveLoop:
                         if not self._last_hud and self.dex_panel is not None:
                             # Show a placeholder UI while the very first location OCR finishes
                             # in the background
-                            from dex.dex_session import LocationView
                             from core.game_time import Period
+                            from dex.dex_session import LocationView
 
                             dummy_view = LocationView(
                                 route="Reading location...",
@@ -1425,7 +1430,7 @@ class LiveLoop:
                 # horde / double: wait until a single wild Pokemon remains
                 log.info("multiple enemy bars (horde): waiting for one to remain")
                 self.last_line = "multi"
-            
+
             if self.mode_override != "dex":
                 self.battle_panel.apply_scale(
                     self.settings.battle_scale or scale_for_window(rect.height)
@@ -1443,7 +1448,6 @@ class LiveLoop:
                 )
                 self.battle_panel.dock_to(rect.left, rect.top, rect.width)
 
-
     def _on_catch(self, enemy: dict) -> None:
         """Advance the Repeat Ball catch chain after a successful catch: +1 if it
         matches the active chain species, else restart the chain at this species."""
@@ -1453,13 +1457,11 @@ class LiveLoop:
         length = self._chain.record_catch(sid)
         log.debug("repeat chain: %s x%d", enemy.get("name"), length)
 
-
     def _chain_for(self, enemy: dict | None) -> int:
         """The current catch chain length that applies to THIS enemy: the running
         chain if it's the same species, else 0 (Repeat Ball shows 1x for a fresh
         species)."""
         return self._chain.length_for(enemy.get("id") if enemy else None)
-
 
     def _update_single(self, frame, bar, rect, is_trainer: bool = False) -> None:
         hp_pct = self.hp.update(bar.hp_pct)  # wait for the bar to settle
@@ -1624,8 +1626,8 @@ class LiveLoop:
             return
         if not self._last_hud:
             if getattr(self, "_loc_future", None) is not None:
-                from dex.dex_session import LocationView
                 from core.game_time import Period
+                from dex.dex_session import LocationView
 
                 dummy_view = LocationView(
                     route="Reading location...",
@@ -1657,7 +1659,6 @@ class LiveLoop:
                     )
                     self.dex_panel.show_here(view)
                     self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
-
 
     def _set_dex_scale(self, scale: float | None) -> None:
         self.settings.set_dex_scale(scale)
@@ -1940,4 +1941,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

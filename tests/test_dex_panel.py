@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from app import dex_panel_text
+from core.game_time import Period
 from dex.dex_session import LocationView
 from dex.dex_tracker import DexEntry
-from core.game_time import Period
 
 
 def entry(id, name, rarity="Common", ways=(), caught=False):
@@ -68,4 +68,3 @@ def test_pads_tail_with_rarest_caught_marked():
     assert "Caught Rare [Rare] ✓" in text
     assert "Caught Common" not in text  # common caught is not padded in
     assert "+" not in text  # no uncaught overflow
-

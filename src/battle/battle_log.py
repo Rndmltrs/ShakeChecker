@@ -21,8 +21,8 @@ import cv2
 import numpy as np
 
 from battle.battle_reader import ChatCalibration
-from core.utils import parse_coord
 from core.ocr_engine import run_ocr_lines, sorted_ocr_lines
+from core.utils import parse_coord
 
 # "Turn 2 started!" — tolerate OCR spacing/case noise. Also tolerate 'l', 'i', 'I' for '1'.
 _TURN = re.compile(r"turn\s*([\dliI]{1,3})\s*start", re.IGNORECASE)
@@ -116,4 +116,3 @@ class AsyncChatReader:
         )
         result, _ = self._ocr(up)
         return parse_turn_number(sorted_ocr_lines(result))
-

@@ -224,4 +224,3 @@ def test_phys_to_logical_scales_by_dpr(qt_app):
     dpr = qt_app.primaryScreen().devicePixelRatio()
     lx, ly = phys_to_logical(1000, 600)
     assert (lx, ly) == (round(1000 / dpr), round(600 / dpr))
-

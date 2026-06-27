@@ -23,31 +23,25 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt6.QtCore import QPoint, QSize, Qt
-from PyQt6.QtGui import QFont, QFontMetrics, QIcon
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFontMetrics
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QLabel,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
+from core.game_time import season_name
 from dex.dex_session import LocationView
 from dex.dex_tracker import display_order
-from core.game_time import season_name
 from ui.sprite_loader import SpriteLoader
 from ui.ui_components import DexSpeciesRow
-from ui.ui_icons import icon_pixmap
 from ui.ui_overlay import (
-    DOCK_MARGIN,
-    DOCK_SIDE,
-    DOCK_TOP_OFFSET,
     BaseOverlay,
-    phys_to_logical,
 )
 
 HOVER_POLL_MS = 40  # how often to check if the cursor is over the panel
@@ -363,4 +357,3 @@ class DexPanel(BaseOverlay):
         self._scroll.setFixedHeight(min(content, cap))
 
         self._scroll.setFixedHeight(min(content, cap))
-

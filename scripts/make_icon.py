@@ -49,7 +49,7 @@ def draw_ball(size: int = 1024, supersample: int = 3) -> Image.Image:
     for rad, col in ((int(0.15 * n), BLACK), (int(0.10 * n), CREAM), (int(0.05 * n), RED)):
         d.ellipse([c - rad, c - rad, c + rad, c + rad], fill=col)
 
-    return img.resize((size, size), Image.LANCZOS)
+    return img.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def main() -> None:

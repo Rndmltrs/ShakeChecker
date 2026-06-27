@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from core.utils import parse_coord
 
+
 class HpColor(enum.StrEnum):
     GREEN = "green"
     YELLOW = "yellow"
@@ -171,6 +172,7 @@ class ChatCalibration(BaseModel):
     left: float
     right: float
     upscale: int
+
     def crop_x(self, width: int) -> tuple[int, int]:
         """(x0, x1) of the chat crop for a frame this wide."""
         x0 = parse_coord(self.left, width)
@@ -459,10 +461,12 @@ def read_enemy_bars(
     GAME_H = 1080.0
 
     # --- Search region: y anchored to game canvas, x scales with window width --
-    y0 = int(round(GAME_H * (c.search_top    if c.search_top    <= 1.0 else c.search_top    / GAME_H)))
-    y1 = int(round(GAME_H * (c.search_bottom if c.search_bottom <= 1.0 else c.search_bottom / GAME_H)))
-    x0 = int(round(w      * (c.search_left   if c.search_left   <= 1.0 else c.search_left   / 1920.0)))
-    x1 = int(round(w      * (c.search_right  if c.search_right  <= 1.0 else c.search_right  / 1920.0)))
+    y0 = int(round(GAME_H * (c.search_top if c.search_top <= 1.0 else c.search_top / GAME_H)))
+    y1 = int(
+        round(GAME_H * (c.search_bottom if c.search_bottom <= 1.0 else c.search_bottom / GAME_H))
+    )
+    x0 = int(round(w * (c.search_left if c.search_left <= 1.0 else c.search_left / 1920.0)))
+    x1 = int(round(w * (c.search_right if c.search_right <= 1.0 else c.search_right / 1920.0)))
 
     # Clamp to actual frame bounds (y1 <= h guards against frames shorter than 1080)
     y0, y1 = max(0, min(y0, h)), max(0, min(y1, h))
@@ -475,19 +479,19 @@ def read_enemy_bars(
     # --- HSV band: search ROI + frame-outline padding --------------------------
     # frame.search_px is in the same 1080p pixel space as y0/y1, so no scaling.
     start_y = max(0, y0 - c.frame.search_px - 2)
-    end_y   = min(h, y1 + c.frame.search_px + 2)
+    end_y = min(h, y1 + c.frame.search_px + 2)
     hsv_band = cv2.cvtColor(frame_bgr[start_y:end_y], cv2.COLOR_BGR2HSV)
-    hsv_roi = hsv_band[(y0 - start_y):(y1 - start_y), x0:x1]
+    hsv_roi = hsv_band[(y0 - start_y) : (y1 - start_y), x0:x1]
 
     mask = _fill_mask(hsv_roi, c)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 9), np.uint8))
-    
-    n, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+
+    n, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)  # type: ignore[call-overload]
 
     bars: list[BarReading] = []
     for i in range(1, n):
         bx, by, bw, bh, _area = stats[i]
-        
+
         # Bar fill must match the fixed PokeMMO bar dimensions exactly.
         if not (c.min_fill_height_px <= bh <= c.max_fill_height_px):
             continue
@@ -499,8 +503,8 @@ def read_enemy_bars(
         fx = x0 + bx
 
         # Band-local coordinates for sub-scanner calls.
-        band_fy     = fy - start_y
-        band_y_top  = (y0 + by) - start_y
+        band_fy = fy - start_y
+        band_y_top = (y0 + by) - start_y
         band_y_bottom = (y0 + by + bh - 1) - start_y
 
         if not (0 <= band_fy < hsv_band.shape[0]):
@@ -514,12 +518,14 @@ def read_enemy_bars(
 
         if fill_w > c.inner_width_px + c.width_tolerance_px:
             continue  # wider than a bar: scenery / UI panel
-        if fill_w < c.full_fill_min_px and not _empty_part_is_crosshatch(hsv_band, band_fy, rx0, rx1, c):
+        if fill_w < c.full_fill_min_px and not _empty_part_is_crosshatch(
+            hsv_band, band_fy, rx0, rx1, c
+        ):
             continue
         if not _has_bar_frame(hsv_band, band_y_top, band_y_bottom, rx0, c):
             continue
 
-        hues  = hsv_band[band_fy, rx0 : rx1 + 1, 0].astype(float)
+        hues = hsv_band[band_fy, rx0 : rx1 + 1, 0].astype(float)
         color = _classify_color(float(np.median(hues)), c.hsv)
         inner = _inner_width(hsv_band, band_y_top, band_y_bottom, rx0, c)
         hp_pct = min(100.0, 100.0 * fill_w / inner)
@@ -543,7 +549,9 @@ def read_enemy_bars(
 
     # --- Status badge: offsets are fixed pixel distances, no scaling needed ----
     s = cal.status
-    if _is_horde_layout(merged, w, horde, spread_px=c.horde_spread_px, remnant_frac=c.remnant_x_frac):
+    if _is_horde_layout(
+        merged, w, horde, spread_px=c.horde_spread_px, remnant_frac=c.remnant_x_frac
+    ):
         dx0, dx1 = s.horde_dx0, s.horde_dx1
     else:
         dx0, dx1 = s.dx0, s.dx1

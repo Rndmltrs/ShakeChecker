@@ -13,6 +13,7 @@ CAL = load_calibration(ROOT / "calibration.toml")
 
 def first_bar(name: str):
     img = cv2.imread(str(ROOT / "tests" / "fixtures" / name))
+    assert img is not None, f"Failed to load fixture: {name}"
     reading = read_battle(img, CAL)
     assert reading.bars, f"no bar in {name}"
     return img, reading.bars[0]
@@ -55,4 +56,3 @@ def test_premier_ball_is_not_ot_caught():
     red = ((hue <= c.red_h_low) | (hue >= c.red_h_high)) & (sat >= c.sat_min) & (val >= c.val_min)
     band[red] = (240, 240, 240)  # paint the red ball white
     assert read_caught_icon(img, bar, c) is False
-

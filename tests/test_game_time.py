@@ -89,4 +89,3 @@ def test_june_is_summer():
 def test_season_changes_monthly_and_uses_current_month():
     assert current_season(utc(0, month=6)) == season_for_month(6)
     assert current_season(utc(0, month=12)) == season_for_month(12)
-

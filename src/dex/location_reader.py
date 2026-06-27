@@ -70,7 +70,7 @@ def _is_main_menu_template(crop_gray: np.ndarray) -> bool:
         up_roi = padded
 
     res = cv2.matchTemplate(up_roi, _ROM_TEMPLATE, cv2.TM_CCOEFF_NORMED)
-    return np.max(res) >= 0.65
+    return bool(np.max(res) >= 0.65)
 
 
 def clean_location(raw: str) -> str:
@@ -201,4 +201,3 @@ def read_location(frame_bgr: np.ndarray, cal: LocationCalibration) -> str:
     _last_mask = mask.copy()
     _last_location = cleaned
     return cleaned
-

@@ -50,4 +50,3 @@ def test_reset_clears_state():
     s.reset()
     assert s.settled is None
     assert s.update(42.0) == 42.0
-

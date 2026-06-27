@@ -98,4 +98,3 @@ def test_cache_returns_same_object(qt_app):
 
 def test_sprites_dir_points_at_vendored_assets():
     assert (SPRITES_DIR / "items" / "poke-ball.png").exists()
-
