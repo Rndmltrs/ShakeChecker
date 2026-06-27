@@ -9,6 +9,7 @@
 
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
+$env:PYTHONPYCACHEPREFIX = Join-Path $PSScriptRoot ".pycache"
 
 # ==============================================================================
 # ENVIRONMENT BOOTSTRAP
@@ -18,8 +19,7 @@ function Invoke-Bootstrap {
 
     try {
         $pyVer = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-        $parts = $pyVer -split '\.'
-        if ([int]$parts[0] -lt 3 -or ([int]$parts[0] -eq 3 -and [int]$parts[1] -lt 11)) {
+        if ([version]$pyVer -lt [version]"3.11") {
             Write-Host "`n  Python $pyVer found, but version 3.11+ is required." -ForegroundColor Red
             Pause
             return $false
@@ -33,6 +33,13 @@ function Invoke-Bootstrap {
     }
 
     if (-not (Test-Path ".\.venv\Scripts\Activate.ps1")) {
+        Write-Host "`n  No virtual environment found. A clean installation is required." -ForegroundColor Cyan
+        $confirm = Read-Host "  Do you want to create a virtual environment now? (Y/N)"
+        if ($confirm -notmatch '^[Yy]') {
+            Write-Host "`n  Installation aborted." -ForegroundColor Red
+            Pause
+            return $false
+        }
         Write-Host "`n  Creating virtual environment..." -ForegroundColor Yellow
         try {
             python -m venv .venv
@@ -49,10 +56,78 @@ function Invoke-Bootstrap {
 
     $depsCheck = & python -c "import cv2" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "`n  Installing dependencies..." -ForegroundColor Yellow
+        Write-Host "`n  Missing dependencies detected." -ForegroundColor Cyan
+        Write-Host "  Calculating download size..." -ForegroundColor DarkGray
+        
+        $outFile = Join-Path $env:TEMP "pip_report_$([guid]::NewGuid()).json"
+        Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "-m pip install --dry-run --report - -q -e `".[dev]`"" -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $outFile -Wait
+        
+        $sizeStr = "unknown size"
+        $totalPkgs = 0
+        if (Test-Path $outFile) {
+            try {
+                $jsonStr = Get-Content $outFile -Raw
+                if ($jsonStr) {
+                    $report = $jsonStr | ConvertFrom-Json
+                    if ($report.install) { $totalPkgs = $report.install.Count }
+                    $bytes = 0
+                    foreach ($pkg in $report.install) {
+                        if ($pkg.download_info -and $pkg.download_info.archive_info -and $pkg.download_info.archive_info.size) {
+                            $bytes += $pkg.download_info.archive_info.size
+                        }
+                    }
+                    if ($bytes -gt 0) {
+                        $mb = [math]::Round($bytes / 1MB, 2)
+                        $sizeStr = "~$mb MB"
+                    }
+                }
+            } catch { }
+            Remove-Item $outFile -Force -ErrorAction SilentlyContinue
+        }
+
+        $confirm = Read-Host "  Do you want to install them now? ($sizeStr) (Y/N)"
+        if ($confirm -notmatch '^[Yy]') {
+            Write-Host "`n  Installation aborted." -ForegroundColor Red
+            Pause
+            return $false
+        }
+        Write-Host ""
+        
         try {
-            pip install -e ".[dev]"
-            Write-Host "`n  Dependencies installed." -ForegroundColor Green
+            $installLog = Join-Path $env:TEMP "pip_install_$([guid]::NewGuid()).log"
+            $procInstall = Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "-m pip install -e `".[dev]`"" -WindowStyle Hidden -RedirectStandardOutput $installLog -RedirectStandardError $installLog -PassThru
+            
+            $spinners = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
+            $i = 0
+            try { [Console]::CursorVisible = $false } catch {}
+            
+            while (-not $procInstall.HasExited) {
+                $pctText = ""
+                if ($totalPkgs -gt 0 -and (Test-Path $installLog)) {
+                    $lines = Get-Content $installLog -ErrorAction SilentlyContinue
+                    $collected = @($lines -match '^(Collecting|Requirement already satisfied|Processing|Downloading|Installing collected packages)').Count
+                    # Rough heuristic: double the packages because it collects then installs. 
+                    $progress = [math]::Min(100, [math]::Floor(($collected / ($totalPkgs * 2)) * 100))
+                    if ($progress -gt 99) { $progress = 99 } # hold at 99 until process exits
+                    $pctText = " [$progress%]"
+                }
+
+                Write-Host "`r  $($spinners[$i]) Installing dependencies$pctText...                " -NoNewline -ForegroundColor Yellow
+                $i = ($i + 1) % $spinners.Length
+                Start-Sleep -Milliseconds 80
+            }
+            Write-Host "`r                                                                      `r" -NoNewline
+            try { [Console]::CursorVisible = $true } catch {}
+            
+            if ($procInstall.ExitCode -eq 0) {
+                Write-Host "  Dependencies installed. [100%]" -ForegroundColor Green
+            } else {
+                Write-Host "  Dependency installation failed." -ForegroundColor Red
+                Get-Content $installLog | Write-Host -ForegroundColor DarkGray
+                Pause
+                return $false
+            }
+            Remove-Item $installLog -Force -ErrorAction SilentlyContinue
         }
         catch {
             Write-Host "`n  Dependency installation failed." -ForegroundColor Red
@@ -97,7 +172,7 @@ function Invoke-PythonApp {
     param([string]$ArgsString = "")
 
     Write-Host "`n  Application running. Press 'q' to terminate.`n" -ForegroundColor DarkGray
-    $proc = Start-Process -FilePath "python" -ArgumentList "src\app.py $ArgsString" -PassThru -NoNewWindow
+    $proc = Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "src\app.py $ArgsString" -PassThru -NoNewWindow
 
     while (-not $proc.HasExited) {
         $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -144,6 +219,7 @@ function Show-Menu {
     Write-Host "  [5] mypy" -ForegroundColor Gray
     Write-Host "  [6] pytest" -ForegroundColor Gray
     Write-Host "  [7] Build Application" -ForegroundColor Gray
+    Write-Host "  [8] Clean Environment" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  [Q] Quit" -ForegroundColor DarkRed
     Write-Host "    ----------------------------------------" -ForegroundColor DarkGray
@@ -169,7 +245,7 @@ function Invoke-Terminal {
     while ($true) {
         Clear-Host
         Write-Host "    [ TERMINAL MODE ]" -ForegroundColor Cyan
-        Write-Host "    Type 'q' to return | 'cmd' for history" -ForegroundColor DarkGray
+        Write-Host "    Type 'q' to return | 'h' for history" -ForegroundColor DarkGray
         Write-Host "    ----------------------------------------" -ForegroundColor DarkGray
 
         $top = $cmdHistory.GetEnumerator() | Sort-Object { $_.Value.Count } -Descending | Select-Object -First 5
@@ -201,7 +277,7 @@ function Invoke-Terminal {
         if ([string]::IsNullOrWhiteSpace($input)) { continue }
         if ($input -eq 'q') { break }
 
-        if ($input -eq 'cmd') {
+        if ($input -eq 'h') {
             Write-Host "`n  Command History" -ForegroundColor Cyan
             $all = $cmdHistory.GetEnumerator() | Sort-Object { $_.Value.Count } -Descending
             $hmap = @{}
@@ -241,7 +317,7 @@ function Invoke-Terminal {
         ForEach-Object { "$($_.Name)|$($_.Value.Count)|$($_.Value.Seq)" } |
         Set-Content $historyFile
 
-        powershell -NoLogo -NoProfile -Command $cmd
+        try { Invoke-Expression $cmd } catch { Write-Host $_ -ForegroundColor Red }
         Write-Host "`n  (press Enter to continue)" -ForegroundColor DarkGray
         [void][System.Console]::ReadLine()
     }
@@ -334,6 +410,19 @@ while ($true) {
             catch {
                 Write-Host "  Build failed." -ForegroundColor Red
             }
+            Pause
+        }
+        '8' {
+            Clear-Host
+            Write-Host "`n  Cleaning environment..." -ForegroundColor Cyan
+            $targets = @("build", "dist", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".pycache")
+            foreach ($t in $targets) {
+                if (Test-Path $t) {
+                    Write-Host "  Removing $t..." -ForegroundColor Gray
+                    Remove-Item -Recurse -Force $t
+                }
+            }
+            Write-Host "  Done.`n" -ForegroundColor Green
             Pause
         }
         'q' { exit }
