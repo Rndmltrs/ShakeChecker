@@ -7,6 +7,14 @@ ShakeChecker belongs entirely to **ghostpixxel**.
 This fork exists only for **personal development**, experimentation, and
 launcher improvements.
 
+-Persistent Dex and battle panels for a smoother, always‑visible overlay experience.
+-Dynamic location detection that correctly handles empty/no‑encounter areas.
+-Thread‑pooled, asynchronous architecture with heavily optimized OCR calls.
+-Z‑order–safe overlay behavior so panels never appear above unrelated windows.
+-Enhanced region detection powered by the new dynamic‑location system.
+-Additional user settings including panel auto‑switching, caught‑status toggles, and region overrides.
+-One‑click debug capture that dumps the full game window with color‑coded regions and OCR slices for troubleshooting.
+
 ---
 
 ## 🔗 Original Project
@@ -17,10 +25,7 @@ launcher improvements.
 **Latest Release:** https://github.com/ghostpixxel/ShakeChecker/releases/latest
 
 ShakeChecker is a passive, **read‑only** screen‑reading overlay for PokeMMO on
-Windows. It observes the game window during wild battles and displays:
-
-- live catch probabilities for each Poké Ball  
-- a “missing here” Pokédex panel while walking  
+Windows.
 
 It never sends input, reads memory, injects code, or interacts with the game
 client in any way. It is strictly a visual overlay.
