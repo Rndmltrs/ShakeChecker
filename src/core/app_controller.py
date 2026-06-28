@@ -20,6 +20,7 @@ from core import paths
 from core.services import AppConfig, OcrServices
 from core.settings_controller import SettingsController, SettingsUpdate
 from core.vision_controller import VisionController
+from ui.ui_manager import UIManager
 from core.window_capture import (
     WindowCapture,
     find_pokemmo_hwnd,
@@ -91,15 +92,15 @@ class AppController:
 
         self.battle_controller = battle_controller
         self.dex_controller = dex_controller
-        self.mode_override: str = "auto" if self.settings.auto_switch else "dex"
         self.settings_controller = settings_controller
+        self.ui_manager = UIManager(self.battle_panel, self.dex_panel, self.settings)
 
         self.battle_panel.set_hidden_names(self.settings_controller.hidden_ball_names())
 
         self.vision_controller = vision_controller
 
         if self.dex_panel is not None:
-            self.dex_panel.on_mode_toggle = self._on_mode_toggle
+            self.dex_panel.on_mode_toggle = lambda: self.ui_manager.toggle_mode(self.state == AppState.BATTLE)
             self.dex_panel.on_settings_click = lambda anchor: self.settings_controller.show(
                 mode="dex", anchor_pos=anchor
             )
@@ -107,7 +108,7 @@ class AppController:
         self.battle_panel.on_settings_click = lambda anchor: self.settings_controller.show(
             mode="battle", anchor_pos=anchor
         )
-        self.battle_panel.on_mode_toggle = self._on_mode_toggle
+        self.battle_panel.on_mode_toggle = lambda: self.ui_manager.toggle_mode(self.state == AppState.BATTLE)
         self.battle_panel.get_ball_state = self.settings_controller.ball_state
         self.battle_panel.on_toggle_ball = self.settings_controller.toggle_ball
         self.battle_panel.on_set_all_balls = self.settings_controller.set_all_balls
@@ -115,17 +116,9 @@ class AppController:
         self.settings_controller.panel.on_dump_debug = self._on_dump_debug
 
         self._last_hud = ""  # last resolved HUD location (drives dex panel refresh)
-        self._loc_read = False  # location OCR'd this battle yet
         self._loc_ocr_raw = ""  # last raw OCR text (tracks what the screen actually shows)
-        self._last_loc_mask: np.ndarray | None = None  # fast visual delta for location OCR
-        self._loc_future: Future[str] | None = None  # background Location OCR task
-        self._name_future: Future[dict[Any, Any] | None] | None = None  # background Name OCR task
-        self._battle_loc_future: Future[Any] | None = None
-
-        self._was_horde = False  # read_battle horde hint (read every tick, so init here)
         self._battle_debounce: int = 0  # frame counter for debounce_battle
         self._stable_in_battle: bool = False  # debounced battle membership
-        self._last_loc_check = 0.0  # last IDLE location OCR (throttle)
         self._dex_log = ""  # last printed dex panel text (console dedup)
 
         if self.dex_panel is not None and self.dex is not None:
@@ -154,7 +147,21 @@ class AppController:
 
         self.pool.submit(_load_ocr)
         log.info("waiting for PokeMMO window...")
+        
+        # Inter-Process Communication (IPC): Watch for a quit signal file created by the
+        # PowerShell launcher.
+        self._quit_timer = QTimer()
+        self._quit_timer.timeout.connect(self._check_quit)
+        self._quit_timer.start(1000)
+        
         QTimer.singleShot(0, self.step)
+
+    def _check_quit(self) -> None:
+        if os.path.exists(".shakechecker_quit"):
+            with contextlib.suppress(OSError):
+                os.remove(".shakechecker_quit")
+            from PyQt6.QtWidgets import QApplication
+            QApplication.quit()
 
     def step(self) -> None:
         # One bad frame (a transient capture/OCR hiccup) must never kill the loop:
@@ -190,7 +197,7 @@ class AppController:
     def _on_mode_toggle(self) -> None:
         if self.dex_panel is not None:
             self.dex_panel._hide_popups()
-        if self.mode_override == "auto":
+        if self.ui_manager.mode_override == "auto":
             self.mode_override = "dex" if self.state == AppState.BATTLE else "battle"
         elif self.mode_override == "dex":
             self.mode_override = "battle"
@@ -206,13 +213,16 @@ class AppController:
         if update.scale_changed and self.hwnd is not None:
             client_rect = get_client_rect(self.hwnd)
             if client_rect is not None:
+                self.ui_manager.sync_panel_positions()
                 if self.battle_panel.isVisible():
-                    new_scale = self.settings.battle_scale or scale_for_window(client_rect.height)
-                    self.battle_panel.apply_scale(new_scale)
+                    self.battle_panel.apply_scale(
+                        self.settings.battle_scale or scale_for_window(client_rect.height)
+                    )
                     self.battle_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
                 if self.dex_panel is not None and self.dex_panel.isVisible():
-                    new_scale = self.settings.dex_scale or scale_for_window(client_rect.height)
-                    self.dex_panel.apply_scale(new_scale)
+                    self.dex_panel.apply_scale(
+                        self.settings.dex_scale or scale_for_window(client_rect.height)
+                    )
                     self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
 
         # Handle Ball toggles
@@ -221,13 +231,9 @@ class AppController:
 
         # Handle Mode overrides
         if update.toggle_auto_switch:
-            if self.dex_panel is not None:
-                self.dex_panel._hide_popups()
-            if self.settings.auto_switch:
-                self.mode_override = "auto"
-            else:
-                self.mode_override = "dex" if self.state == AppState.BATTLE else "battle"
-            self._apply_mode_change(f"auto switch toggled, mode is now: {self.mode_override}")
+            self.ui_manager.handle_auto_switch_toggled(self.state == AppState.BATTLE)
+            if self.ui_manager.mode_override == "dex":
+                self._refresh_dex_panel()
 
         # Handle Dex Intents
         if update.new_profile:
@@ -277,25 +283,8 @@ class AppController:
                     handle.setTransientParent(proxy)
 
     def _tick(self) -> float:
-
-        # Inter-Process Communication (IPC): Watch for a quit signal file created by the
-        # PowerShell launcher. This allows us to intercept the termination request and
-        # shut down QApplication gracefully, ensuring our tray icon is cleaned up.
-        # We throttle this check to once per second to avoid any unnecessary OS calls.
-        if not hasattr(self, "_last_quit_check"):
-            self._last_quit_check = 0.0
-
-        current_time = time.monotonic()
-        if current_time - self._last_quit_check > 1.0:
-            self._last_quit_check = current_time
-            if os.path.exists(".shakechecker_quit"):
-                with contextlib.suppress(OSError):
-                    os.remove(".shakechecker_quit")
-                from PyQt6.QtWidgets import QApplication
-
-                QApplication.quit()
-                return 0.1
-
+        now = time.monotonic()
+        
         if self.state is AppState.WAITING:
             self.hwnd = find_pokemmo_hwnd()
             if self.hwnd is None:
@@ -303,16 +292,7 @@ class AppController:
             log.info("PokeMMO window found")
             self.state = AppState.IDLE
             self.capture.hwnd = self.hwnd
-            self._set_owner(self.battle_panel, self.hwnd)
-            self._set_owner(self.dex_panel, self.hwnd)
-
-            # Nudge panels above the game window once at startup
-            from ui.ui_overlay import bring_overlay_above_game
-
-            if self.battle_panel is not None:
-                bring_overlay_above_game(self.battle_panel)
-            if self.dex_panel is not None:
-                bring_overlay_above_game(self.dex_panel)
+            self.ui_manager.attach_to_window(self.hwnd)
 
         assert self.hwnd is not None
         # Capture the FULL window (matches the full-window fixtures the CV regions
@@ -323,15 +303,11 @@ class AppController:
             if not is_window_alive(self.hwnd):
                 log.info("window lost, waiting...")
                 if self.hwnd is not None:
-                    self._set_owner(self.battle_panel, 0)
-                    self._set_owner(self.dex_panel, 0)
+                    self.ui_manager.detach_window()
                     self.hwnd = None
                 if self.capture is not None:
                     self.capture.hwnd = 0
                 self.state = AppState.WAITING
-                self.battle_panel.hide_battle()
-                if self.dex_panel is not None:
-                    self.dex_panel.hide_panel()
             return self.config.waiting_poll_s
 
         if self.capture is None:
@@ -341,9 +317,8 @@ class AppController:
         if frame is None:
             return 0.05
         self._last_frame = frame
-        now = time.monotonic()
 
-        needs_reading = (self.mode_override != "dex") or (
+        needs_reading = (self.ui_manager.mode_override != "dex") or (
             self.state == AppState.BATTLE
             and getattr(self.battle_controller, "cached", None) is None
         )
@@ -386,12 +361,9 @@ class AppController:
             self.last_seen_battle = now
             if self.state is not AppState.BATTLE:
                 self.state = AppState.BATTLE
-                if self.settings.auto_switch:
-                    self.mode_override = "auto"
+                self.ui_manager.on_battle_start()
                 log.info("battle detected")
                 self.battle_controller.reset(now)
-                if self.dex_panel is not None:
-                    self.dex_panel.hide_panel()
 
             b_frame = BattleFrame(
                 frame=frame,
@@ -408,7 +380,7 @@ class AppController:
                 location_text=self._loc_ocr_raw,
             )
             timer_active = ("timer" not in self.settings.hidden_balls) and (
-                self.mode_override != "dex"
+                self.ui_manager.mode_override != "dex"
             )
             update = self.battle_controller.step(b_frame, timer_active)
 
@@ -419,14 +391,7 @@ class AppController:
             ):
                 log.info("dex: recorded OT-caught from UI")
 
-            if self.mode_override != "dex":
-                self.battle_panel.set_loading(update.is_loading)
-                if update.panel_state is not None:
-                    self.battle_panel.apply_scale(
-                        self.settings.battle_scale or scale_for_window(client_rect.height)
-                    )
-                    self.battle_panel.show_battle(**update.panel_state)
-                    self.battle_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+            self.ui_manager.update_battle_panel(update.panel_state, client_rect, update.is_loading)
         elif self.state is AppState.BATTLE and now - self.last_seen_battle <= grace:
             # In a battle but no battle signal this frame (animation gap). Log what
             # dropped out so a false "battle ended" can be diagnosed: which signal
@@ -443,8 +408,7 @@ class AppController:
             )
         elif self.state is AppState.BATTLE and now - self.last_seen_battle > grace:
             self.state = AppState.IDLE
-            if self.settings.auto_switch:
-                self.mode_override = "auto"
+            self.ui_manager.on_battle_end()
             self.last_line = ""
             if (
                 not self.battle_controller._caught_printed
@@ -453,7 +417,6 @@ class AppController:
             self._battle_debounce = 0
             self._stable_in_battle = False
             self.vision_controller.reset()
-            self.battle_panel.hide_battle()
             # Show the dex panel at once, from the pre-battle location (you can't
             # move during a battle, so it's still valid) -- no wait for the next
             # throttled OCR tick. _last_loc_check is reset so OCR re-confirms soon.
@@ -511,81 +474,13 @@ class AppController:
 
             if self.dex_panel is not None:
                 self.dex_panel.set_loading(dex_update.is_loading)
-
             if dex_update.log_line and dex_update.log_line != getattr(self, "_dex_log", None):
                 log.info(dex_update.log_line)
                 self._dex_log = dex_update.log_line
 
-            if (
-                (
-                    self.mode_override == "dex"
-                    or (
-                        self.mode_override == "auto"
-                        and self.settings.auto_switch
-                        and self.state != AppState.BATTLE
-                    )
-                )
-                and self.dex_panel is not None
-                and dex_update.location_view is not None
-            ):
-                self.dex_panel.apply_scale(
-                    self.settings.dex_scale or scale_for_window(client_rect.height)
-                )
-                if self.mode_override != "battle":
-                    self.dex_panel.show_here(dex_update.location_view)
-                self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+            self.ui_manager.update_dex_panel(dex_update.location_view, client_rect, dex_update.is_loading, in_battle)
 
-        # Apply manual mode override UI forcing
-        if self.mode_override == "dex":
-            if self.battle_panel.isVisible():
-                self.battle_panel.hide()
-            if (
-                self.state == AppState.BATTLE
-                and self.dex_panel is not None
-                and not self.dex_panel.isVisible()
-            ):
-                self.dex_panel.show()
-        elif self.mode_override == "battle":
-            if self.dex_panel is not None and self.dex_panel.isVisible():
-                self.dex_panel.hide_panel()
-            if self.state == AppState.IDLE and not self.battle_panel.isVisible():
-                self.battle_panel.apply_scale(
-                    self.settings.battle_scale or scale_for_window(client_rect.height)
-                )
-                self.battle_panel.show_battle(
-                    dex_id=0,
-                    name="—",
-                    catch_rate=None,
-                    turn=0,
-                    probs={},
-                    is_empty=True,
-                )
-        # Sync positions so toggling doesn't cause panels to jump
-        bp_pos = getattr(self.battle_panel, "_last_pos", None)
-        dp_pos = getattr(self.dex_panel, "_last_pos", None) if self.dex_panel is not None else None
-
-        if self.battle_panel.isVisible() and bp_pos is not None:
-            if self.dex_panel is not None:
-                self.dex_panel._last_pos = bp_pos
-                self.dex_panel.move(*bp_pos)
-        elif (
-            self.dex_panel is not None
-            and self.dex_panel.isVisible()
-            and dp_pos is not None
-            or self.battle_panel.isVisible()
-            and bp_pos is None
-            and dp_pos is not None
-        ):
-            self.battle_panel._last_pos = dp_pos
-            self.battle_panel.move(*dp_pos)
-        elif (
-            self.dex_panel is not None
-            and self.dex_panel.isVisible()
-            and dp_pos is None
-            and bp_pos is not None
-        ):
-            self.dex_panel._last_pos = bp_pos
-            self.dex_panel.move(*bp_pos)
+        self.ui_manager.enforce_mode_ui(self.state == AppState.BATTLE, client_rect)
 
         return self._frame_interval()
 
@@ -637,12 +532,9 @@ class AppController:
         if hasattr(self, "dex_controller"):
             self.dex_controller.force_refresh()
         self._last_hud = ""
-        self._last_loc_mask = None
         log.info("Forced location refresh via Dex panel")
 
     def _force_refresh_battle(self) -> None:
-        self._was_horde = False
-        self._loc_read = False
         if hasattr(self, "battle_controller"):
             self.battle_controller.force_refresh()
         log.info("Forced battle state refresh via Battle panel")

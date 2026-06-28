@@ -57,11 +57,3 @@ TURN_DOWN_GUARD_S = 3.0
 # How long the HUD location mask must remain perfectly still before OCR is allowed
 # to run. Filters out blur from camera panning and rapid-fire UI transitions.
 LOC_MASK_STABLE_S = 0.125
-
-
-# =============================================================================
-# UI & DISPLAY
-# =============================================================================
-
-# Dex entries shown before collapsing the rest into a "+X" summary
-DEX_SHOWN_MAX = 5
