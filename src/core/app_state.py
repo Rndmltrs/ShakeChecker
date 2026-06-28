@@ -1,4 +1,5 @@
 import enum
+import json
 
 from core import paths
 
@@ -53,3 +54,19 @@ class AppState(enum.Enum):
     WAITING = "waiting"
     IDLE = "idle"
     BATTLE = "battle"
+
+
+def load_balls() -> list[dict]:
+    return json.loads((DATA / "balls.json").read_text("utf-8"))["balls"]
+
+
+def load_status_rates() -> dict[str, float]:
+    return json.loads((DATA / "status_rates.json").read_text("utf-8"))["rates"]
+
+
+def lookup_species(name: str) -> dict:
+    entries = json.loads(SPECIES_PATH.read_text("utf-8"))
+    for e in entries:
+        if e["name"].lower() == name.lower():
+            return e
+    raise SystemExit(f"unknown species: {name!r}")

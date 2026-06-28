@@ -93,21 +93,11 @@ def is_cave_location(name: str) -> bool:
     return any(all(word in n for word in group) for group in _CAVE_WORD_GROUPS)
 
 
-def extract_location_mask(
-    frame_bgr: NDArray[np.uint8], cal: LocationCalibration
-) -> NDArray[np.uint8] | None:
-    h, w = frame_bgr.shape[:2]
-
-    y1 = int(cal.top) if cal.top > 1.0 else int(h * cal.top)
-    y2 = int(cal.bottom) if cal.bottom > 1.0 else int(h * cal.bottom)
-    x1 = int(cal.left) if cal.left > 1.0 else int(w * cal.left)
-    x2 = int(cal.right) if cal.right > 1.0 else int(w * cal.right)
-
-    crop = frame_bgr[y1:y2, x1:x2]
-    if crop.size == 0:
+def extract_location_mask(hud_crop: NDArray[np.uint8]) -> NDArray[np.uint8] | None:
+    if hud_crop.size == 0:
         return None
 
-    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(hud_crop, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150)
 
     kernel = np.ones((3, 3), np.uint8)
@@ -117,7 +107,7 @@ def extract_location_mask(
     return mask.astype(np.uint8, copy=False)
 
 
-def read_location(frame_bgr: np.ndarray, cal: LocationCalibration) -> str:
+def read_location(hud_crop: np.ndarray) -> str:
     """OCR the top-left HUD location (cleaned), or '' if not readable."""
     import time
 
@@ -128,16 +118,10 @@ def read_location(frame_bgr: np.ndarray, cal: LocationCalibration) -> str:
         return _last_location
     _last_loc_time = time.time()
 
-    h, w = frame_bgr.shape[:2]
-
-    # Initial HUD crop
-    y1 = int(cal.top) if cal.top > 1.0 else int(h * cal.top)
-    y2 = int(cal.bottom) if cal.bottom > 1.0 else int(h * cal.bottom)
-    x1 = int(cal.left) if cal.left > 1.0 else int(w * cal.left)
-    x2 = int(cal.right) if cal.right > 1.0 else int(w * cal.right)
-    crop = frame_bgr[y1:y2, x1:x2]
-    if crop.size == 0:
+    if hud_crop.size == 0:
         return ""
+
+    crop = hud_crop.copy()
 
     # --- LOOSER HEIGHT LIMIT (80% band) ---
     h0 = crop.shape[0]

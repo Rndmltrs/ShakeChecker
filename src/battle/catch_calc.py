@@ -8,8 +8,12 @@ calculator (c4vv/CatchCalc, pokeballs.js). This module performs no I/O.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
+
+from battle.name_reader import NameReader
+from battle.catch_chain import CatchChain
 
 X_CAP = 255.0
 SHAKE_SCALE = 65536.0
@@ -131,3 +135,72 @@ def catch_probability(
         return 1.0
     y = SHAKE_SCALE / (X_CAP / x) ** 0.25
     return (y / SHAKE_SCALE) ** 4
+
+def battle_context(
+    enemy: dict,
+    turns_completed: int = 0,
+    turns_asleep: int = 0,
+    enemy_asleep: bool = False,
+    dusk_active: bool = False,
+    repeat_chain: int = 0,
+) -> BattleContext:
+    """Build the conditional-ball context from a resolved enemy dict.
+
+    turns_completed/turns_asleep default to 0 until the turn counter lands, so
+    Quick Ball reads x5, Timer Ball x1 and Dream Ball x1 — all correct for the
+    first turn with no accumulated sleep. repeat_chain is the current same-species
+    catch streak (0 unless this enemy matches the active Repeat Ball chain)."""
+    return BattleContext(
+        turns_completed=turns_completed,
+        turns_asleep=turns_asleep,
+        enemy_asleep=enemy_asleep,
+        enemy_types=tuple(enemy.get("types") or ()),
+        enemy_level=enemy.get("level") or 1,
+        dusk_active=dusk_active,
+        repeat_chain=repeat_chain,
+    )
+
+
+def format_line(
+    name: str, hp_pct: float, status: str, probs: list[tuple[str, float | None]]
+) -> str:
+    balls = "  ".join(f"{ball} {'??' if p is None else f'{100 * p:5.1f}%'}" for ball, p in probs)
+    return f"{name:12.12s} HP {hp_pct:5.1f}% [{status}]  {balls}"
+
+
+def ball_probs(
+    hp_pct: float, base_rate: int | None, status_rate: float, balls: list[dict], ctx: BattleContext
+) -> list[tuple[str, float | None]]:
+    """Catch probability per ball. base_rate is None for species with no known
+    catch rate (roaming Latias/Latios/Mesprit/Cresselia) -> every prob is None
+    (the overlay/console then show "??")."""
+    if base_rate is None:
+        return [(b["name"], None) for b in balls]
+    return [
+        (
+            b["name"],
+            catch_probability(hp_pct / 100.0, base_rate, ball_multiplier(b, ctx), status_rate),
+        )
+        for b in balls
+    ]
+
+
+def resolve_enemy(
+    species_override: dict | None,
+    name_reader: NameReader | None,
+    frame_bgr,
+    bar,
+) -> dict | None:
+    """Enemy dict ({name, catch_rate, types, level}) for a bar: the override if
+    given, else OCR. None when the name can't be read."""
+    if species_override is not None:
+        return species_override
+    assert name_reader is not None
+    return name_reader.read(frame_bgr, bar)
+
+
+def chain_for(chain: CatchChain, enemy: dict | None) -> int:
+    """The current catch chain length that applies to THIS enemy: the running
+    chain if it's the same species, else 0 (Repeat Ball shows 1x for a fresh
+    species)."""
+    return chain.length_for(enemy.get("id") if enemy else None)
