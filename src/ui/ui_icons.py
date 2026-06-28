@@ -68,9 +68,9 @@ def icon_pixmap(kind: str, size: int, color: str) -> QPixmap:
         rect = QRectF(cx - r, cy - r, r * 2, r * 2)
         # drawArc span angle is in 1/16ths. Positive = counter-clockwise.
         # Arc 1: start at 15 deg (bottom-right), span 120 (to top-left 135 deg)
-        p.drawArc(rect, int(15 * 16), int(120 * 16))
+        p.drawArc(rect, 15 * 16, 120 * 16)
         # Arc 2: start at 195 deg (top-left), span 120 (to bottom-right 315 deg)
-        p.drawArc(rect, int(195 * 16), int(120 * 16))
+        p.drawArc(rect, 195 * 16, 120 * 16)
 
         # Arrow heads
         p.setPen(Qt.PenStyle.NoPen)

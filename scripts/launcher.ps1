@@ -487,7 +487,8 @@ while ($true) {
 
             if (-not $needs) {
                 Write-Host "  No changes detected. Build is up to date." -ForegroundColor Green
-                Write-Host "  Output: dist/ShakeChecker/" -ForegroundColor Yellow
+                Write-Host "  The portable standalone app is located at:" -ForegroundColor Cyan
+                Write-Host "  $PWD\dist\ShakeChecker\" -ForegroundColor Yellow
                 Pause
                 continue
             }
@@ -501,7 +502,9 @@ while ($true) {
                     pyinstaller --noconfirm ShakeChecker.spec
                 }
                 Write-Host "`n  Build complete!" -ForegroundColor Green
-                Write-Host "  Output: dist/ShakeChecker/" -ForegroundColor Yellow
+                Write-Host "  The portable standalone app is located at:" -ForegroundColor Cyan
+                Write-Host "  $PWD\dist\ShakeChecker\ShakeChecker.exe" -ForegroundColor Yellow
+                Write-Host "`n  You can now run ShakeChecker.exe directly without needing Python or this launcher!" -ForegroundColor DarkGray
             }
             catch {
                 Write-Host "  Build failed: $_" -ForegroundColor Red
@@ -528,6 +531,17 @@ while ($true) {
             Pause
         }
         '8' {
+            Clear-Host
+            Write-Host "`n  Cleaning environment..." -ForegroundColor Cyan
+            $targets = @("build", "dist", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".pycache", "src\*.egg-info")
+
+            if (Test-Path ".venv") {
+                $delVenv = Read-Host "  Do you want to completely remove the virtual environment? (Y/N)"
+                if ($delVenv -match '^[Yy]') {
+                    $targets = @(".venv") + $targets
+                }
+            }
+            $oldProg = $ProgressPreference
             $ProgressPreference = 'SilentlyContinue'
             foreach ($t in $targets) {
                 if (Test-Path $t) {
