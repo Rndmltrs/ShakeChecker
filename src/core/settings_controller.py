@@ -1,13 +1,15 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from core.account_store import AccountConfig, delete_account_data
-from core.settings_store import Settings
 from core.services import AppConfig
+from core.settings_store import Settings
 from ui.settings_panel import SettingsPanel
 
 log = logging.getLogger("shakechecker")
+
 
 @dataclass
 class SettingsUpdate:
@@ -17,13 +19,13 @@ class SettingsUpdate:
     scale_changed: bool = False
     refresh_dex: bool = False
     settings_changed: bool = False
-    
+
     # Domain intents to route to DexController
     new_profile: str | None = None
     deleted_profile: str | None = None
     toggle_keep_caught: bool = False
     new_region: str | None = None
-    
+
     # Domain intents to route to AppController
     toggle_auto_switch: bool = False
 
@@ -43,30 +45,30 @@ class SettingsController:
         self.config = config
         self.get_region = get_region
         self.on_update = on_update
-        
+
         self.panel = SettingsPanel()
-        
+
         # Wire up callbacks
         self.panel.on_choose_profile = self._on_choose_profile
         self.panel.on_create_profile = self._on_choose_profile
         self.panel.on_remove_profile = self._on_remove_profile
         self.panel.get_profiles = self._get_profiles
-        
+
         self.panel.get_keep_caught = lambda: self.settings.keep_caught
         self.panel.on_toggle_keep_caught = self._on_toggle_keep_caught
-        
+
         self.panel.get_auto_switch = lambda: self.settings.auto_switch
         self.panel.on_toggle_auto_switch = self._on_toggle_auto_switch
-        
+
         self.panel.get_click_to_catch = lambda: self.settings.click_to_catch
         self.panel.on_toggle_click_to_catch = self._on_toggle_click_to_catch
-        
+
         self.panel.get_current_region = self.get_region
         self.panel.on_override_region = self._on_override_region
-        
+
         self.panel.get_dex_scale = lambda: self.settings.dex_scale
         self.panel.on_set_dex_scale = self._on_set_dex_scale
-        
+
         self.panel.get_battle_scale = lambda: self.settings.battle_scale
         self.panel.on_set_battle_scale = self._on_set_battle_scale
 
@@ -101,10 +103,12 @@ class SettingsController:
     def _on_toggle_keep_caught(self) -> None:
         now = self.settings.toggle_keep_caught()
         log.info(f"dex: keep-caught {'on' if now else 'off'}")
-        self.on_update(SettingsUpdate(settings_changed=True, toggle_keep_caught=True, refresh_dex=True))
+        self.on_update(
+            SettingsUpdate(settings_changed=True, toggle_keep_caught=True, refresh_dex=True)
+        )
 
     def _on_toggle_auto_switch(self) -> None:
-        now = self.settings.toggle_auto_switch()
+        self.settings.toggle_auto_switch()
         self.on_update(SettingsUpdate(settings_changed=True, toggle_auto_switch=True))
 
     def _on_toggle_click_to_catch(self) -> None:

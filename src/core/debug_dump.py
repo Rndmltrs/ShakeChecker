@@ -1,10 +1,11 @@
 """Diagnostic module for generating visual debug dumps of the current game frame.
 
 This module is responsible for capturing the current screen state, annotating it with
-the active calibration regions (HP bars, OCR bounds, UI elements), and saving the 
-results to disk. This is heavily utilized when the user manually requests a debug 
+the active calibration regions (HP bars, OCR bounds, UI elements), and saving the
+results to disk. This is heavily utilized when the user manually requests a debug
 dump via the settings panel to troubleshoot visual detection issues.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,11 +23,11 @@ def trigger_debug_dump(
     cal: Calibration,
 ) -> None:
     """Save an annotated full frame and cropped sub-regions to the logs/debug/ directory.
-    
+
     This function isolates heavy image processing dependencies (cv2, numpy) by loading them
-    lazily upon invocation. This ensures that the application does not incur a cold-start 
+    lazily upon invocation. This ensures that the application does not incur a cold-start
     penalty for these libraries when running the standard game loop.
-    
+
     Args:
         frame: The raw captured screen frame (np.ndarray).
         reading: The current BattleReading object containing detected HP bars and state.
@@ -216,7 +217,7 @@ def trigger_debug_dump(
             cv2.imwrite(str(debug_dir / f"location_raw_{timestamp}.png"), loc_raw)
 
             loc_crop = loc_raw.copy()
-            mask = location_reader.extract_location_mask(frame, cal.location)
+            mask = location_reader.extract_location_mask(loc_raw)
             if mask is not None:
                 ys, xs = np.where(mask > 0)
                 if len(xs) > 0:

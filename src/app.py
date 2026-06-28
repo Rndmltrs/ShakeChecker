@@ -18,8 +18,8 @@ from __future__ import annotations
 import argparse
 import io
 import logging
-import sys
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import win32api
@@ -30,38 +30,61 @@ from PyQt6.QtCore import qInstallMessageHandler
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
-from battle.battle_log import read_turn_number, AsyncChatReader
-from battle.battle_reader import BattleState, Calibration, load_calibration, read_battle, BattleTextReader
+from battle.battle_controller import BattleController
+from battle.battle_log import AsyncChatReader, read_turn_number
+from battle.battle_reader import (
+    BattleState,
+    BattleTextReader,
+    Calibration,
+    load_calibration,
+    read_battle,
+)
 from battle.catch_calc import ball_probs, battle_context, format_line, resolve_enemy
-from battle.name_reader import NameReader
-from battle.turn_tracker import TurnTracker
-from battle.hp_settler import HpSettler
-from battle.status_settler import StatusSettler
 from battle.catch_chain import CatchChain
-
+from battle.hp_settler import HpSettler
+from battle.name_reader import NameReader
+from battle.status_settler import StatusSettler
+from battle.turn_tracker import TurnTracker
 from core import paths
 from core.app_controller import AppController
-from core.app_state import (BATTLE_ANIM_GRACE_S, BATTLE_END_GRACE_S, BATTLE_FRAME_S, BATTLE_START_GRACE_S, DEX_LOC_INTERVAL_S, IDLE_FRAME_S, LOC_MASK_STABLE_S, MENU_STABLE_FRAMES, SPECIES_PATH, TEMPLATES_DIR, TRAINER_END_GRACE_S, TURN_DOWN_GUARD_S, USERDATA, WAITING_POLL_S, DEX_SHOWN_MAX, load_balls, load_status_rates, lookup_species)
-from core.services import AppConfig, OcrServices, BattleServices
-from core.settings_store import Settings
+from core.app_state import (
+    BATTLE_ANIM_GRACE_S,
+    BATTLE_END_GRACE_S,
+    BATTLE_FRAME_S,
+    BATTLE_START_GRACE_S,
+    DEX_LOC_INTERVAL_S,
+    DEX_SHOWN_MAX,
+    IDLE_FRAME_S,
+    LOC_MASK_STABLE_S,
+    MENU_STABLE_FRAMES,
+    SPECIES_PATH,
+    TEMPLATES_DIR,
+    TRAINER_END_GRACE_S,
+    TURN_DOWN_GUARD_S,
+    USERDATA,
+    WAITING_POLL_S,
+    load_balls,
+    load_status_rates,
+    lookup_species,
+)
+from core.services import AppConfig, BattleServices, OcrServices
 from core.settings_controller import SettingsController
+from core.settings_store import Settings
+from core.utils import parse_coord
 from core.vision_controller import VisionController
-
 from core.window_capture import (
     WINDOW_TITLE,
+    WindowCapture,
     find_pokemmo_hwnd,
     fold_confusables,
     get_client_rect,
     iter_visible_windows,
     set_dpi_awareness,
     title_matches,
-    WindowCapture
 )
+from dex.dex_controller import DexController
 from dex.dex_factory import build_dex_session
 from dex.location_reader import is_cave_location, read_location
-from dex.dex_controller import DexController
-from battle.battle_controller import BattleController
-
 from ui.battle_panel import BattlePanel
 from ui.dex_panel import DexPanel
 from ui.tray_menu import build_tray
@@ -71,6 +94,7 @@ log = logging.getLogger("shakechecker")
 
 class _LevelFormatter(logging.Formatter):
     """Plain message for INFO, '[dbg]'-prefixed for DEBUG."""
+
     def format(self, record: logging.LogRecord) -> str:
         msg = ("[dbg] " if record.levelno <= logging.DEBUG else "") + record.getMessage()
         if record.exc_info:
@@ -82,6 +106,7 @@ def setup_logging(debug: bool) -> None:
     log.handlers.clear()
     log.setLevel(logging.DEBUG if debug else logging.INFO)
     log.propagate = False
+    handler: logging.Handler
     if sys.stdout is not None:
         handler = logging.StreamHandler(sys.stdout)
     else:
@@ -100,6 +125,7 @@ def analyze_image(
 ) -> None:
     """Offline mode: run the full pipeline on a single PNG and print the result."""
     import cv2
+
     frame = cv2.imread(image_path)
     if frame is None:
         raise SystemExit(f"cannot read image: {image_path!r}")
@@ -115,11 +141,18 @@ def analyze_image(
         enemy = resolve_enemy(species_override, name_reader, frame, bar)
         label = enemy["name"] if enemy else "?"
         tag = f"bar {i}: " if len(reading.bars) > 1 else ""
-        print(f"  {tag}{label}  HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}")
+        print(
+            f"  {tag}{label}  HP {bar.hp_pct:.1f}% ({bar.color.value})  status: {bar.status.value}"
+        )
         if reading.state is BattleState.SINGLE and enemy is not None:
             turn = read_turn_number(frame, cal.chat)
             turns_completed = turn - 1 if turn else 0
-            dusk = is_cave_location(read_location(frame, cal.location))
+            h, w = frame.shape[:2]
+            ly0 = parse_coord(cal.location.top, h)
+            ly1 = parse_coord(cal.location.bottom, h)
+            lx0 = parse_coord(cal.location.left, w)
+            lx1 = parse_coord(cal.location.right, w)
+            dusk = is_cave_location(read_location(frame[ly0:ly1, lx0:lx1]))
             ctx = battle_context(enemy, turns_completed=turns_completed, dusk_active=dusk)
             probs = ball_probs(bar.hp_pct, enemy["catch_rate"], status_rates[status], balls, ctx)
             turn_note = f"[turn {turn}] " if turn else "[turn ?] "
@@ -152,6 +185,7 @@ def list_windows() -> None:
 
 SINGLE_INSTANCE_NAME = "ShakeChecker_SingleInstance_Mutex"
 
+
 def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME) -> int | None:
     handle = win32event.CreateMutex(None, False, name)
     if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
@@ -161,19 +195,33 @@ def acquire_single_instance(name: str = SINGLE_INSTANCE_NAME) -> int | None:
 
 
 def run(
-    species_override: dict | None, status_override: str | None, cal: Calibration, account: str | None = None, debug: bool = False
+    species_override: dict | None,
+    status_override: str | None,
+    cal: Calibration,
+    account: str | None = None,
+    debug: bool = False,
 ) -> None:
     setup_logging(debug)
     lock = acquire_single_instance()
     if lock is None:
         log.info("ShakeChecker is already running; this instance will exit")
-        win32api.MessageBox(0, "ShakeChecker is already running.", "ShakeChecker", win32con.MB_OK | win32con.MB_ICONINFORMATION)
+        win32api.MessageBox(
+            0,
+            "ShakeChecker is already running.",
+            "ShakeChecker",
+            win32con.MB_OK | win32con.MB_ICONINFORMATION,
+        )
         return
 
     def qt_message_handler(mode, context, message):
-        if "SetProcessDpiAwarenessContext" in message or "DPI_AWARENESS_CONTEXT" in message or "WindowDoesNotAcceptFocus" in message:
+        if (
+            "SetProcessDpiAwarenessContext" in message
+            or "DPI_AWARENESS_CONTEXT" in message
+            or "WindowDoesNotAcceptFocus" in message
+        ):
             return
         print(message, file=sys.stderr)
+
     qInstallMessageHandler(qt_message_handler)
 
     app = QApplication(sys.argv[:1])
@@ -182,7 +230,7 @@ def run(
     app.setWindowIcon(icon)
 
     dex = build_dex_session(account)
-    
+
     cores = os.cpu_count() or 4
     workers = max(1, min(4, cores - 2))
     pool = ThreadPoolExecutor(max_workers=workers)
@@ -204,20 +252,20 @@ def run(
         dex_shown_max=DEX_SHOWN_MAX,
         userdata_path=USERDATA,
     )
-    
+
     ocr = OcrServices(
         name_reader=None if species_override else NameReader(cal.name, SPECIES_PATH),
         battle_text_reader=BattleTextReader(cal.battle_text, TEMPLATES_DIR),
-        chat_reader=AsyncChatReader(cal.chat)
+        chat_reader=AsyncChatReader(cal.chat),
     )
-    
+
     services = BattleServices(
         turns=TurnTracker(),
         hp=HpSettler(),
         status=StatusSettler(),
         chain=CatchChain(),
     )
-    
+
     balls = load_balls()
     status_rates = load_status_rates()
     settings = Settings.load(USERDATA)
@@ -228,7 +276,7 @@ def run(
         get_region=lambda: dex.region if dex else None,
         on_update=lambda x: None,
     )
-    
+
     battle_controller = BattleController(
         species_override=species_override,
         status_override=status_override,
@@ -240,13 +288,13 @@ def run(
         services=services,
         config=config,
     )
-    
+
     dex_controller = DexController(
         dex_session=dex,
         loc_pool=loc_pool,
         config=config,
     )
-    
+
     vision_controller = VisionController(
         ocr=ocr,
         battle_reader_func=read_battle,
@@ -254,12 +302,12 @@ def run(
         cal=cal,
         config=config,
     )
-    
+
     capture = WindowCapture(0)
-    
+
     battle_panel = BattlePanel([b["name"] for b in balls])
     dex_panel = DexPanel() if dex else None
-    
+
     loop = AppController(
         pool=pool,
         loc_pool=loc_pool,
@@ -277,10 +325,10 @@ def run(
         dex=dex,
         dex_panel=dex_panel,
     )
-    
+
     settings_controller.on_update = loop._handle_settings_update
 
-    tray = build_tray(icon, app.quit, paths.APP_VERSION)
+    build_tray(icon, app.quit, paths.APP_VERSION)
     loop.start()
     try:
         code = app.exec()
@@ -295,10 +343,12 @@ def restrict_onnx_threads() -> None:
     except ImportError:
         return
     original_init = onnxruntime.SessionOptions.__init__
+
     def patched_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         self.intra_op_num_threads = 1
         self.inter_op_num_threads = 1
+
     onnxruntime.SessionOptions.__init__ = patched_init
 
 
@@ -311,9 +361,16 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--species", help="override the auto-detected species")
     group.add_argument("--rate", type=int, help="override with a raw base catch rate")
-    parser.add_argument("--status", default=None, choices=sorted(load_status_rates()), help="override auto-detected status")
+    parser.add_argument(
+        "--status",
+        default=None,
+        choices=sorted(load_status_rates()),
+        help="override auto-detected status",
+    )
     parser.add_argument("--image", help="offline mode: analyze a single PNG")
-    parser.add_argument("--list-windows", action="store_true", help="diagnostic: list visible windows")
+    parser.add_argument(
+        "--list-windows", action="store_true", help="diagnostic: list visible windows"
+    )
     parser.add_argument("--account", help="PokeMMO account/character for dex")
     parser.add_argument("--debug", action="store_true", help="verbose diagnostics")
     args = parser.parse_args()

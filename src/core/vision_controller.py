@@ -1,9 +1,12 @@
-from dataclasses import dataclass
-from typing import Any, Callable
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
+from typing import Any
+
 import numpy as np
 
-from core.services import OcrServices, AppConfig
+from core.services import AppConfig, OcrServices
+
 
 @dataclass
 class VisionUpdate:
@@ -12,6 +15,7 @@ class VisionUpdate:
     battle_text_raw: Any | None
     battle_reading_raw: Any | None
     debounce_state: float
+
 
 class VisionController:
     def __init__(
@@ -61,21 +65,24 @@ class VisionController:
 
         if needs_reading and getattr(self, "_battle_future", None) is None:
             # Blindly pass hint to the injected reader function
-            self._battle_future = self.pool.submit(self.read_battle, frame.copy(), self.cal, horde=hint)
+            self._battle_future = self.pool.submit(
+                self.read_battle, frame.copy(), self.cal, horde=hint
+            )
 
         if self._last_bt is None:
             return None
 
         # 3. Detect generic HUD presence
         from battle.battle_reader import is_battle_ui_present
+
         hud_present = is_battle_ui_present(frame, self.cal.battle_ui)
-        
+
         # Determine enemy count based on raw reading
         enemy_count = 0
         if self._last_reading is not None:
-            if hasattr(self._last_reading, 'bars'):
+            if hasattr(self._last_reading, "bars"):
                 enemy_count = len(self._last_reading.bars)
-            elif getattr(self._last_reading, 'is_horde', False):
+            elif getattr(self._last_reading, "is_horde", False):
                 enemy_count = self.config.horde_enemy_count
 
         # Update and return raw vision data
@@ -84,5 +91,5 @@ class VisionController:
             enemy_count=enemy_count,
             battle_text_raw=self._last_bt,
             battle_reading_raw=self._last_reading if needs_reading else None,
-            debounce_state=self._debounce_state
+            debounce_state=self._debounce_state,
         )

@@ -8,6 +8,7 @@ import pytest
 import dex.location_reader
 from battle.battle_reader import load_calibration
 from dex.location_reader import clean_location, is_cave_location, read_location
+from core.utils import parse_coord
 
 dex.location_reader.OCR_THROTTLE_S = 0.0
 
@@ -55,4 +56,9 @@ def test_not_cave():
 )
 def test_read_location_and_cave_on_fixtures(name, is_cave):
     img = cv2.imread(str(FIXTURES / name))
-    assert is_cave_location(read_location(img, CAL.location)) is is_cave
+    h, w = img.shape[:2]
+    ly0 = parse_coord(CAL.location.top, h)
+    ly1 = parse_coord(CAL.location.bottom, h)
+    lx0 = parse_coord(CAL.location.left, w)
+    lx1 = parse_coord(CAL.location.right, w)
+    assert is_cave_location(read_location(img[ly0:ly1, lx0:lx1])) is is_cave

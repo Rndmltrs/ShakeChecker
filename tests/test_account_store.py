@@ -4,7 +4,8 @@ import json
 
 import pytest
 
-from core.account_store import AccountConfig, CaughtStore, _safe_account, delete_account_data
+from core.account_store import AccountConfig, _safe_account, delete_account_data
+from dex.dex_structures import CaughtStore
 
 # --- account name sanitizing ---
 

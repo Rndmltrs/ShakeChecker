@@ -4,12 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from dex.dex_structures import location_entries, DexEntry
 from dex.dex_tracker import (
-    DexEntry,
     EncounterData,
     RegionResolver,
     display_order,
-    location_entries,
     select_display,
 )
 

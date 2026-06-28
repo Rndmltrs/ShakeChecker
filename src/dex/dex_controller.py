@@ -1,12 +1,13 @@
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 
+from core.services import AppConfig
 from dex import location_reader
 from dex.dex_session import DexSession
 from dex.dex_structures import LocationView
-from core.services import AppConfig
 
 
 @dataclass
@@ -25,26 +26,28 @@ class DexUpdate:
 
 
 class DexController:
-    def __init__(self, *, dex_session: DexSession | None, loc_pool: ThreadPoolExecutor, config: AppConfig):
+    def __init__(
+        self, *, dex_session: DexSession | None, loc_pool: ThreadPoolExecutor, config: AppConfig
+    ):
         self.dex = dex_session
         self.loc_pool = loc_pool
         self.config = config
-        
+
         self._loc_ocr_raw = ""
         self._last_hud = ""
         self._last_loc_check = 0.0
         self._last_loc_trigger = 0.0
-        
-        self._last_seen_mask = None
+
+        self._last_seen_mask: np.ndarray | None = None
         self._mask_stable_since = 0.0
-        self._last_loc_mask = None
-        self._mask_changed_since = None
-        
-        self._loc_future = None
-        self._pending_loc_mask = None
-        
-        self._queued_loc_frame = None
-        self._queued_loc_mask = None
+        self._last_loc_mask: np.ndarray | None = None
+        self._mask_changed_since: float | None = None
+
+        self._loc_future: Future[str] | None = None
+        self._pending_loc_mask: np.ndarray | None = None
+
+        self._queued_loc_frame: np.ndarray | None = None
+        self._queued_loc_mask: np.ndarray | None = None
 
     def record_caught(self, species_id: int) -> bool:
         """Proxy to record a catch in the dex session."""
@@ -63,6 +66,7 @@ class DexController:
     def load_profile(self, account: str) -> None:
         if self.dex is not None:
             from dex.dex_structures import CaughtStore
+
             self.dex.set_caught(CaughtStore.for_account(self.config.userdata_path, account))
 
     def step(self, frame: DexFrame) -> DexUpdate:
@@ -113,8 +117,9 @@ class DexController:
             elif self._loc_future is None:
                 trigger_latency = now - self._last_loc_trigger
                 from core.ocr_engine import _log_performance
+
                 _log_performance("location_trigger_latency", trigger_latency, (0, 0))
-                
+
                 self._last_loc_trigger = now
                 self._loc_future = self.loc_pool.submit(
                     location_reader.read_location, hud_crop.copy()
@@ -140,14 +145,17 @@ class DexController:
                     self._loc_ocr_raw = ocr_result
                 self._last_loc_check = 0.0
 
-            if self._queued_loc_frame is not None and self._queued_loc_mask is not None:
-                if now - self._last_loc_check >= self.config.dex_loc_interval_s:
-                    self._loc_future = self.loc_pool.submit(
-                        location_reader.read_location, self._queued_loc_frame
-                    )
-                    self._pending_loc_mask = self._queued_loc_mask
-                    self._queued_loc_frame = None
-                    self._queued_loc_mask = None
+            if (
+                self._queued_loc_frame is not None
+                and self._queued_loc_mask is not None
+                and now - self._last_loc_check >= self.config.dex_loc_interval_s
+            ):
+                self._loc_future = self.loc_pool.submit(
+                    location_reader.read_location, self._queued_loc_frame
+                )
+                self._pending_loc_mask = self._queued_loc_mask
+                self._queued_loc_frame = None
+                self._queued_loc_mask = None
 
     def _step_build_update(self) -> DexUpdate:
         is_loading = self._loc_future is not None
@@ -160,6 +168,7 @@ class DexController:
             if not self._last_hud and self._loc_future is not None:
                 # Placeholder UI while first location reads
                 from core.game_time import Period
+
                 location_view = LocationView(
                     route="Reading location...",
                     region="Please wait",
@@ -172,9 +181,12 @@ class DexController:
                 # Debounce OCR jitter
                 if self._last_hud and hud_name:
                     import re
+
                     from rapidfuzz import fuzz
+
                     def extract_digits(s: str) -> tuple[str, ...]:
                         return tuple(re.findall(r"\d+", s))
+
                     if (
                         extract_digits(hud_name) == extract_digits(self._last_hud)
                         and fuzz.ratio(hud_name.lower(), self._last_hud.lower()) >= 75.0
@@ -182,7 +194,7 @@ class DexController:
                     ):
                         hud_name = self._last_hud
                         self._loc_ocr_raw = hud_name
-                
+
                 # Normal update
                 view = self.dex.on_location(hud_name)
                 if view is not None:

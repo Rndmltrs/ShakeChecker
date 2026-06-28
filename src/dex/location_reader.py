@@ -8,7 +8,6 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 
-from battle.battle_reader import LocationCalibration
 from core.ocr_engine import run_ocr_no_det
 
 _last_mask = None

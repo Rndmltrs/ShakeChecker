@@ -24,9 +24,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from battle.battle_reader import load_calibration, read_battle, read_caught_icon  # noqa: E402
 from battle.name_reader import NameReader  # noqa: E402
-from core.account_store import CaughtStore  # noqa: E402
 from core.game_time import Period, season_name  # noqa: E402
+from core.utils import parse_coord  # noqa: E402
 from dex.dex_session import DexSession  # noqa: E402
+from dex.dex_structures import CaughtStore  # noqa: E402
 from dex.dex_tracker import EncounterData  # noqa: E402
 from dex.location_reader import read_location  # noqa: E402
 
@@ -67,7 +68,12 @@ def main() -> None:
             if img is None:
                 print(f"{path}: cannot read\n")
                 continue
-            loc_raw = read_location(img, cal.location)
+            h, w = img.shape[:2]
+            ly0 = parse_coord(cal.location.top, h)
+            ly1 = parse_coord(cal.location.bottom, h)
+            lx0 = parse_coord(cal.location.left, w)
+            lx1 = parse_coord(cal.location.right, w)
+            loc_raw = read_location(img[ly0:ly1, lx0:lx1])
 
             # enemy + OT ball (single-battle only)
             reading = read_battle(img, cal)

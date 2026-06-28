@@ -14,12 +14,10 @@ real UTC clock but is injectable for tests.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 from core.game_time import Period, current_period, current_season
 from dex.dex_structures import CaughtStore, EncounterData, LocationView
 from dex.dex_tracker import RegionResolver
-
 
 
 class DexSession:

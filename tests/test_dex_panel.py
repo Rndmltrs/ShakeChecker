@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app import dex_panel_text
 from core.game_time import Period
+from dex.dex_formatters import dex_panel_text
 from dex.dex_session import LocationView
 from dex.dex_tracker import DexEntry
 

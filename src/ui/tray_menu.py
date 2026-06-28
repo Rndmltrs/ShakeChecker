@@ -1,6 +1,7 @@
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
+
 def build_tray(icon: QIcon, on_quit, version: str) -> QSystemTrayIcon:
     tray = QSystemTrayIcon(icon)
     tray.setToolTip(f"ShakeChecker v{version}")

@@ -9,14 +9,20 @@ import numpy as np
 from PyQt6.QtCore import QRect
 
 from battle.battle_logic import apply_chat_turn, debounce_menu, is_horde_remnant
-from battle.battle_reader import BattleState, Calibration, Status, is_trainer_battle, read_caught_icon
-from battle.catch_calc import ball_probs, battle_context, format_line, chain_for
-
+from battle.battle_reader import (
+    BattleState,
+    Calibration,
+    Status,
+    is_trainer_battle,
+    read_caught_icon,
+)
+from battle.catch_calc import ball_probs, battle_context, chain_for, format_line
 from core.game_time import current_game_minute, is_dusk_ball_night
+from core.services import AppConfig, BattleServices, OcrServices
 from dex.location_reader import is_cave_location
-from core.services import OcrServices, BattleServices, AppConfig
 
 log = logging.getLogger("shakechecker")
+
 
 @dataclass
 class BattleFrame:
@@ -28,12 +34,14 @@ class BattleFrame:
     now: float
     location_text: str
 
+
 @dataclass
 class BattleUpdate:
     caught_species_id: int | None
     log_line: str | None
     is_multi: bool
     panel_state: dict[str, Any] | None
+
 
 class BattleController:
     def __init__(
@@ -108,8 +116,6 @@ class BattleController:
         self._last_chat_submit = 0.0
         self._battle_start = now
 
-
-
     def get_vision_hint(self) -> bool:
         """Returns the horde hint for the vision pipeline."""
         return self._was_horde
@@ -119,10 +125,11 @@ class BattleController:
         reading = f.battle_reading_raw
         bt = f.battle_text_raw
         now = f.now
-        rect = f.rect
 
         if reading is None or bt is None:
-            return BattleUpdate(caught_species_id=None, log_line=None, is_multi=False, panel_state=None)
+            return BattleUpdate(
+                caught_species_id=None, log_line=None, is_multi=False, panel_state=None
+            )
 
         if reading.is_horde or f.enemy_count > 1:
             self._was_horde = True
@@ -280,7 +287,11 @@ class BattleController:
             elif self._name_future is not None and self._name_future.done():
                 sp = self._name_future.result()
                 self._name_future = None
-                if sp is not None and sp.get("level") is not None and sp["name"] == self.cached["name"]:
+                if (
+                    sp is not None
+                    and sp.get("level") is not None
+                    and sp["name"] == self.cached["name"]
+                ):
                     self.cached["level"] = sp["level"]
 
         if (
@@ -322,7 +333,7 @@ class BattleController:
                 hp_pct, self.cached["catch_rate"], self.status_rates[status], self.balls, ctx
             )
             line = f"[{turn_note}] " + format_line(self.cached["name"], hp_pct, status, probs_list)
-            
+
             overlay_probs = {name: p for name, p in probs_list if p is not None}
             update.panel_state = {
                 "dex_id": self.cached.get("id", -1),
@@ -338,6 +349,6 @@ class BattleController:
 
         if line != self.last_line:
             if update.log_line:
-                log.info(update.log_line) # print previous log line if there is one (like caught)
+                log.info(update.log_line)  # print previous log line if there is one (like caught)
             update.log_line = line
             self.last_line = line

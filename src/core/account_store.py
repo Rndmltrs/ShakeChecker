@@ -83,6 +83,3 @@ def delete_account_data(userdata_dir: Path | str, account: str) -> None:
     """Delete an account's stored caught list (its accounts/<account>/ folder)."""
     folder = Path(userdata_dir) / "accounts" / _safe_account(account)
     shutil.rmtree(folder, ignore_errors=True)
-
-
-

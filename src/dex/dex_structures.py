@@ -13,8 +13,8 @@ from pathlib import Path
 
 from rapidfuzz import fuzz, process
 
-from core.game_time import Period
 from core.account_store import _safe_account
+from core.game_time import Period
 
 
 @dataclass(frozen=True)

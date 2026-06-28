@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from battle.name_reader import NameReader
-from battle.battle_reader import BattleTextReader
 from battle.battle_log import AsyncChatReader
-from battle.turn_tracker import TurnTracker
-from battle.hp_settler import HpSettler
-from battle.status_settler import StatusSettler
+from battle.battle_reader import BattleTextReader
 from battle.catch_chain import CatchChain
+from battle.hp_settler import HpSettler
+from battle.name_reader import NameReader
+from battle.status_settler import StatusSettler
+from battle.turn_tracker import TurnTracker
+
 
 @dataclass(frozen=True)
 class OcrServices:
@@ -17,12 +18,14 @@ class OcrServices:
     battle_text_reader: BattleTextReader
     chat_reader: AsyncChatReader
 
+
 @dataclass(frozen=True)
 class BattleServices:
     turns: TurnTracker
     hp: HpSettler
     status: StatusSettler
     chain: CatchChain
+
 
 @dataclass(frozen=True)
 class AppConfig:

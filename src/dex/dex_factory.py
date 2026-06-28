@@ -1,18 +1,19 @@
 """Factory for DexSession."""
+
 from __future__ import annotations
 
 import json
 import logging
 
+from core.account_store import AccountConfig
 from core.app_state import (
     AREA_INDEX_PATH,
     ENCOUNTERS_PATH,
     LEGENDARIES_PATH,
     USERDATA,
 )
-from core.account_store import AccountConfig
 from dex.dex_session import DexSession
-from dex.dex_structures import EncounterData, CaughtStore
+from dex.dex_structures import CaughtStore, EncounterData
 
 log = logging.getLogger(__name__)
 

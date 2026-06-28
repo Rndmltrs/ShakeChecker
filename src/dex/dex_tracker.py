@@ -16,11 +16,11 @@ list and exposes the two operations the app needs:
 from __future__ import annotations
 
 from dex.dex_structures import (
-    DexEntry,
-    EncounterData,
+    _RARITY_RANK,
     MATCH_THRESHOLD,
     PAD_RARITIES,
-    _RARITY_RANK,
+    DexEntry,
+    EncounterData,
     _normalize,
 )
 
@@ -63,9 +63,6 @@ def select_display(entries: list[DexEntry], limit: int) -> tuple[list[DexEntry],
         )
         rows = rows + rares[: limit - len(rows)]
     return rows, hidden
-
-
-
 
 
 class RegionResolver:

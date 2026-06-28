@@ -8,12 +8,11 @@ calculator (c4vv/CatchCalc, pokeballs.js). This module performs no I/O.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from battle.name_reader import NameReader
 from battle.catch_chain import CatchChain
+from battle.name_reader import NameReader
 
 X_CAP = 255.0
 SHAKE_SCALE = 65536.0
@@ -135,6 +134,7 @@ def catch_probability(
         return 1.0
     y = SHAKE_SCALE / (X_CAP / x) ** 0.25
     return (y / SHAKE_SCALE) ** 4
+
 
 def battle_context(
     enemy: dict,
