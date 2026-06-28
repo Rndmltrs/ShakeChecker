@@ -61,7 +61,7 @@ from battle.name_reader import NameReader
 from battle.status_settler import StatusSettler
 from battle.turn_tracker import TurnTracker
 from core import paths
-from core.account_store import AccountConfig, CaughtStore, delete_account_data
+from core.account_store import AccountConfig, delete_account_data
 from core.game_time import current_game_minute, is_dusk_ball_night, season_name
 from core.settings_store import Settings
 from core.utils import parse_coord
@@ -78,8 +78,8 @@ from core.window_capture import (
     title_matches,
 )
 from dex.dex_formatters import dex_panel_text
-from dex.dex_session import DexSession, LocationView
-from dex.dex_tracker import EncounterData
+from dex.dex_session import DexSession
+from dex.dex_factory import build_dex_session
 from dex.location_reader import is_cave_location, read_location
 from ui.battle_panel import BattlePanel
 from ui.dex_panel import DexPanel
@@ -223,29 +223,6 @@ def list_windows() -> None:
         print(f"  selected client rect: {get_client_rect(picked)}")
 
 
-def build_dex(account_override: str | None) -> DexSession | None:
-    """Build the dex session for the active account, or None if the encounter
-    data is missing. The active account is chosen manually and remembered: an
-    explicit --account wins, else the last used one, else a 'default' profile."""
-    if not ENCOUNTERS_PATH.exists():
-        log.info("dex: encounters.json not found (run scripts/update_data.py) — dex disabled")
-        return None
-    data = EncounterData.load(ENCOUNTERS_PATH, LEGENDARIES_PATH)
-
-    import json
-
-    raw_idx = json.loads(AREA_INDEX_PATH.read_text("utf-8"))
-    area_index = {loc: region for region, locs in raw_idx.items() for loc in locs}
-
-    cfg = AccountConfig.load(USERDATA)
-    account = cfg.resolve_active(account_override)
-    if account is None:
-        account = cfg.use("default")
-        log.info("dex: no account set — using 'default' (pass --account NAME per character)")
-    caught = CaughtStore.for_account(USERDATA, account)
-    log.info(f"dex: account '{account}' — {len(caught.caught)} species marked caught")
-    return DexSession(data, caught, area_index)
-
 
 SINGLE_INSTANCE_NAME = "ShakeChecker_SingleInstance_Mutex"
 
@@ -309,7 +286,7 @@ def run(
     app.setWindowIcon(icon)
 
     battle_panel = BattlePanel([b["name"] for b in load_balls()])
-    dex = build_dex(account)
+    dex = build_dex_session(account)
     dex_panel = DexPanel() if dex is not None else None
     loop = AppController(
         species_override, status_override, cal, battle_panel, dex=dex, dex_panel=dex_panel

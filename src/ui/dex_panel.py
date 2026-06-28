@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.game_time import season_name
-from dex.dex_session import LocationView
+from dex.dex_structures import LocationView
 from dex.dex_tracker import display_order
 from ui.sprite_loader import SpriteLoader
 from ui.ui_components import DexSpeciesRow

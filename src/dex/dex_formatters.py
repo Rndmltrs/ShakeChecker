@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.app_state import DEX_SHOWN_MAX
 from core.game_time import season_name
-from dex.dex_session import LocationView
+from dex.dex_structures import LocationView
 from dex.dex_tracker import select_display
 
 

@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 
 from dex import location_reader
-from dex.dex_session import DexSession, LocationView
+from dex.dex_session import DexSession
+from dex.dex_structures import LocationView
 from core.app_state import DEX_LOC_INTERVAL_S, LOC_MASK_STABLE_S
 
 
@@ -60,7 +61,7 @@ class DexController:
 
     def load_profile(self, account: str) -> None:
         if self.dex is not None:
-            from core.account_store import CaughtStore
+            from dex.dex_structures import CaughtStore
             from core.app_state import USERDATA
             self.dex.set_caught(CaughtStore.for_account(USERDATA, account))
 

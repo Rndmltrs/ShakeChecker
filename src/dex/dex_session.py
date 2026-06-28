@@ -16,20 +16,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from core.account_store import CaughtStore
 from core.game_time import Period, current_period, current_season
-from dex.dex_tracker import DexEntry, EncounterData, RegionResolver
+from dex.dex_structures import CaughtStore, EncounterData, LocationView
+from dex.dex_tracker import RegionResolver
 
-
-@dataclass(frozen=True)
-class LocationView:
-    """What to show for the current location."""
-
-    route: str  # display name, shown as the panel header
-    region: str
-    period: Period
-    season: int
-    entries: list[DexEntry]  # all available species (caught + uncaught), dex-sorted
 
 
 class DexSession:

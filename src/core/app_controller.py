@@ -15,7 +15,8 @@ from battle.battle_reader import BattleState, Calibration, Status, is_battle_ui_
 from battle.name_reader import NameReader
 from battle.battle_controller import BattleController, BattleFrame
 
-from core.account_store import AccountConfig, CaughtStore
+from core.account_store import AccountConfig
+
 from core.app_state import (BATTLE_ANIM_GRACE_S, BATTLE_END_GRACE_S, BATTLE_FRAME_S, BATTLE_START_GRACE_S, DEX_LOC_INTERVAL_S, IDLE_FRAME_S, LOC_MASK_STABLE_S, MENU_STABLE_FRAMES, SPECIES_PATH, TEMPLATES_DIR, TRAINER_END_GRACE_S, TURN_DOWN_GUARD_S, USERDATA, WAITING_POLL_S, AppState, load_balls, load_status_rates)
 from core import paths
 from core.game_time import current_game_minute, is_dusk_ball_night
@@ -23,7 +24,8 @@ from core.settings_store import Settings
 from dex.dex_controller import DexController, DexFrame
 from core.window_capture import WindowCapture, find_pokemmo_hwnd, get_client_rect, get_window_rect, is_window_alive
 
-from dex.dex_session import DexSession, LocationView
+from dex.dex_session import DexSession
+from dex.dex_structures import LocationView
 
 from ui.battle_panel import BattlePanel
 from ui.dex_panel import DexPanel
@@ -114,6 +116,10 @@ class AppController:
         self.battle_panel.on_settings_click = lambda anchor: self.settings_controller.show(
             mode="battle", anchor_pos=anchor
         )
+        self.battle_panel.on_mode_toggle = self._on_mode_toggle
+        self.battle_panel.get_ball_state = self.settings_controller.ball_state
+        self.battle_panel.on_toggle_ball = self.settings_controller.toggle_ball
+        self.battle_panel.on_set_all_balls = self.settings_controller.set_all_balls
         
         self._last_hud = ""  # last resolved HUD location (drives dex panel refresh)
         self._loc_read = False  # location OCR'd this battle yet
@@ -531,7 +537,7 @@ class AppController:
         if not self.dex_controller._last_hud:
             if getattr(self.dex_controller, "_loc_future", None) is not None:
                 from core.game_time import Period
-                from dex.dex_session import LocationView
+                from dex.dex_structures import LocationView
 
                 dummy_view = LocationView(
                     route="Reading location...",
