@@ -39,33 +39,38 @@ from battle.battle_reader import (
     load_calibration,
     read_battle,
 )
-from battle.catch_calc import ball_probs, battle_context, format_line, resolve_enemy
+from battle.catch_calc import (
+    ball_probs,
+    battle_context,
+    format_line,
+    load_balls,
+    load_status_rates,
+    resolve_enemy,
+)
 from battle.catch_chain import CatchChain
 from battle.hp_settler import HpSettler
-from battle.name_reader import NameReader
+from battle.name_reader import NameReader, lookup_species
 from battle.status_settler import StatusSettler
 from battle.turn_tracker import TurnTracker
 from core import paths
 from core.app_controller import AppController
-from core.app_state import (
+from core.config import (
     BATTLE_ANIM_GRACE_S,
     BATTLE_END_GRACE_S,
     BATTLE_FRAME_S,
     BATTLE_START_GRACE_S,
     DEX_LOC_INTERVAL_S,
-    DEX_SHOWN_MAX,
     IDLE_FRAME_S,
     LOC_MASK_STABLE_S,
     MENU_STABLE_FRAMES,
-    SPECIES_PATH,
-    TEMPLATES_DIR,
     TRAINER_END_GRACE_S,
     TURN_DOWN_GUARD_S,
-    USERDATA,
     WAITING_POLL_S,
-    load_balls,
-    load_status_rates,
-    lookup_species,
+)
+from core.paths import (
+    SPECIES_PATH,
+    TEMPLATES_DIR,
+    USERDATA,
 )
 from core.services import AppConfig, BattleServices, OcrServices
 from core.settings_controller import SettingsController
@@ -249,7 +254,6 @@ def run(
         idle_frame_s=IDLE_FRAME_S,
         battle_frame_s=BATTLE_FRAME_S,
         waiting_poll_s=WAITING_POLL_S,
-        dex_shown_max=DEX_SHOWN_MAX,
         userdata_path=USERDATA,
     )
 

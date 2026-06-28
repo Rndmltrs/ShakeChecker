@@ -4,12 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from dex.dex_structures import location_entries, DexEntry
+from dex.dex_structures import DexEntry, location_entries
 from dex.dex_tracker import (
     EncounterData,
     RegionResolver,
     display_order,
-    select_display,
 )
 
 ROOT = Path(__file__).parent.parent
@@ -114,37 +113,6 @@ def test_all_caught_yields_no_uncaught():
 
 def de(id, rarity="Common", caught=False, ways=()):
     return DexEntry(id, f"Mon{id}", ways, rarity, caught)
-
-
-def test_select_shows_uncaught_first_with_plus_overflow():
-    entries = [de(i) for i in range(1, 9)]  # 8 uncaught
-    rows, hidden = select_display(entries, 5)
-    assert [e.id for e in rows] == [1, 2, 3, 4, 5]
-    assert hidden == 3
-
-
-def test_select_pads_with_rarest_caught_when_room():
-    entries = [
-        de(1),  # uncaught
-        de(2),  # uncaught
-        de(10, "Common", caught=True),  # caught but too common to pad
-        de(11, "Rare", caught=True),
-        de(12, "Very Rare", caught=True),
-        de(13, "Lure", caught=True),
-    ]
-    rows, hidden = select_display(entries, 5)
-    assert hidden == 0
-    assert [e.id for e in rows[:2]] == [1, 2]  # uncaught first
-    # padded with the rarest caught of Lure/Rare/Very Rare: VeryRare, Rare, Lure
-    assert [e.id for e in rows[2:]] == [12, 11, 13]
-    assert all(e.caught for e in rows[2:])
-
-
-def test_select_no_padding_when_uncaught_overflow():
-    entries = [de(i) for i in range(1, 7)] + [de(99, "Very Rare", caught=True)]
-    rows, hidden = select_display(entries, 5)
-    assert all(not e.caught for e in rows)  # no room to pad
-    assert hidden == 1
 
 
 def test_display_order_lists_all_uncaught_then_caught_rares():

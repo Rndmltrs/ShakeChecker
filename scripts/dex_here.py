@@ -21,10 +21,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from core.game_time import Period, current_period, current_season, season_name  # noqa: E402
-from dex.dex_tracker import EncounterData, select_display  # noqa: E402
+from dex.dex_tracker import EncounterData, display_order  # noqa: E402
 
 DATA = ROOT / "data"
-SHOWN_MAX = 5  # overlay shows this many; the rest collapse into "+X"
 
 
 def main() -> None:
@@ -58,15 +57,9 @@ def main() -> None:
         check = " ✓" if e.caught else ""
         return f"  #{e.id:<4} {e.name:<13} [{e.rarity}]{ways}{check}"
 
-    if args.all:  # every available species, caught flagged
-        for e in entries:
-            print(fmt(e))
-        return
-    rows, hidden = select_display(entries, SHOWN_MAX)  # hybrid: uncaught first, pad rares
+    rows = display_order(entries, keep_caught=args.all)
     for e in rows:
         print(fmt(e))
-    if hidden > 0:
-        print(f"  +{hidden}")
 
 
 if __name__ == "__main__":

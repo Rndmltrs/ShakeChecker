@@ -37,7 +37,7 @@ def get_global_stylesheet() -> str:
             border-radius: 10px;
         }
 
-        #legend, #profiles {
+        #legend, #profiles, #balls {
             background: rgba(18,18,20,238);
             border-radius: 8px;
         }

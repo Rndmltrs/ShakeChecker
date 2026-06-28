@@ -41,5 +41,4 @@ class AppConfig:
     idle_frame_s: float
     battle_frame_s: float
     waiting_poll_s: float
-    dex_shown_max: int
     userdata_path: Path

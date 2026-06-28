@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -14,7 +15,6 @@ from battle.battle_controller import BattleController, BattleFrame
 from battle.battle_logic import battle_end_grace, debounce_battle, is_in_battle
 from battle.battle_reader import Calibration
 from core import paths
-from core.app_state import AppState
 from core.services import AppConfig, OcrServices
 from core.settings_controller import SettingsController, SettingsUpdate
 from core.vision_controller import VisionController
@@ -30,6 +30,13 @@ from dex.dex_session import DexSession
 from ui.battle_panel import BattlePanel
 from ui.dex_panel import DexPanel
 from ui.ui_overlay import scale_for_window
+
+
+class AppState(enum.Enum):
+    WAITING = "waiting"
+    IDLE = "idle"
+    BATTLE = "battle"
+
 
 log = logging.getLogger("shakechecker")
 
@@ -102,6 +109,7 @@ class AppController:
         self.battle_panel.get_ball_state = self.settings_controller.ball_state
         self.battle_panel.on_toggle_ball = self.settings_controller.toggle_ball
         self.battle_panel.on_set_all_balls = self.settings_controller.set_all_balls
+        self.settings_controller.panel.on_dump_debug = self._on_dump_debug
 
         self._last_hud = ""  # last resolved HUD location (drives dex panel refresh)
         self._loc_read = False  # location OCR'd this battle yet
@@ -582,6 +590,13 @@ class AppController:
         view = self.dex.on_location(self.dex_controller._last_hud)
         if view is not None:
             self.dex_panel.show_here(view)
+
+    def _on_dump_debug(self) -> None:
+        if hasattr(self, "_last_frame") and self._last_frame is not None:
+            from core.debug_dump import trigger_debug_dump
+
+            reading = getattr(self.vision_controller, "_last_reading", None)
+            trigger_debug_dump(self._last_frame, reading, self.cal)
 
     def _dex_toggle_caught(self, dex_id: int) -> None:
         if self.dex is None:

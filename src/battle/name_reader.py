@@ -18,6 +18,7 @@ from rapidfuzz import fuzz, process
 
 from battle.battle_reader import BarReading, NameCalibration
 from core.ocr_engine import run_ocr_no_det
+from core.paths import SPECIES_PATH
 
 # Cut the OCR string at the level marker ("Lv", "Lu", "Iv" misreads) so only
 # the name remains; everything after (level number, gender, caught ball) is noise.
@@ -92,6 +93,14 @@ def match_species_name(raw_text: str, names: list[str], min_score: float) -> str
         return None
     name, score, _ = match
     return name if score >= min_score else None
+
+
+def lookup_species(name: str) -> dict:
+    entries = json.loads(SPECIES_PATH.read_text("utf-8"))
+    for e in entries:
+        if e["name"].lower() == name.lower():
+            return e
+    raise SystemExit(f"unknown species: {name!r}")
 
 
 class NameReader:

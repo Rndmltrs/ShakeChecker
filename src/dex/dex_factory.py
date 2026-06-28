@@ -6,7 +6,7 @@ import json
 import logging
 
 from core.account_store import AccountConfig
-from core.app_state import (
+from core.paths import (
     AREA_INDEX_PATH,
     ENCOUNTERS_PATH,
     LEGENDARIES_PATH,

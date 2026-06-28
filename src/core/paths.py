@@ -32,6 +32,11 @@ def resource_root() -> Path:
 # Bundled, read-only resources.
 DATA_DIR = resource_root() / "data"
 CALIBRATION_PATH = resource_root() / "calibration.toml"
+SPECIES_PATH = DATA_DIR / "species_core.json"
+TEMPLATES_DIR = DATA_DIR / "templates"
+ENCOUNTERS_PATH = DATA_DIR / "encounters.json"
+LEGENDARIES_PATH = DATA_DIR / "legendaries.json"
+AREA_INDEX_PATH = DATA_DIR / "area_index.json"
 
 
 def userdata_dir() -> Path:
@@ -42,3 +47,6 @@ def userdata_dir() -> Path:
         base = Path(os.environ.get("APPDATA") or Path.home())
         return base / APP_NAME
     return resource_root() / "userdata"
+
+
+USERDATA = userdata_dir()

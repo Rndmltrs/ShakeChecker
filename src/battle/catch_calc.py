@@ -8,11 +8,22 @@ calculator (c4vv/CatchCalc, pokeballs.js). This module performs no I/O.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from battle.catch_chain import CatchChain
 from battle.name_reader import NameReader
+from core import paths
+
+
+def load_balls() -> list[dict]:
+    return json.loads((paths.DATA_DIR / "balls.json").read_text("utf-8"))["balls"]
+
+
+def load_status_rates() -> dict[str, float]:
+    return json.loads((paths.DATA_DIR / "status_rates.json").read_text("utf-8"))["rates"]
+
 
 X_CAP = 255.0
 SHAKE_SCALE = 65536.0

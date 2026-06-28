@@ -47,14 +47,6 @@ def test_plain_grass_has_no_parens():
     assert "(" not in text.split("needed")[1]
 
 
-def test_caps_uncaught_at_five_with_overflow():
-    entries = [entry(i, f"Mon{i}") for i in range(1, 9)]  # 8 uncaught
-    lines = dex_panel_text(view(entries)).splitlines()
-    assert lines[0].endswith("8 needed")
-    assert len(lines) == 1 + 5 + 1  # header + 5 + "+3"
-    assert lines[-1] == "  +3"
-
-
 def test_pads_tail_with_rarest_caught_marked():
     entries = [
         entry(1, "A"),  # uncaught

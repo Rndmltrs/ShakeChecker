@@ -47,24 +47,6 @@ def display_order(entries: list[DexEntry], keep_caught: bool = False) -> list[De
     return uncaught + caught
 
 
-def select_display(entries: list[DexEntry], limit: int) -> tuple[list[DexEntry], int]:
-    """Pick the rows to show and how many uncaught are hidden ("+X").
-
-    Uncaught first, in dex order (the to-do list). If they all fit and leave room,
-    pad the tail with the rarest already-caught species of PAD_RARITIES so the
-    notable rares stay visible even once caught. Returns (rows, hidden_uncaught)."""
-    uncaught = [e for e in entries if not e.caught]
-    rows = uncaught[:limit]
-    hidden = len(uncaught) - len(rows)
-    if hidden == 0 and len(rows) < limit:
-        rares = sorted(
-            (e for e in entries if e.caught and e.rarity in PAD_RARITIES),
-            key=lambda e: (-_RARITY_RANK[e.rarity], e.id),
-        )
-        rows = rows + rares[: limit - len(rows)]
-    return rows, hidden
-
-
 class RegionResolver:
     """Tracks the current region so ambiguous location names ("Route 5" exists in
     Kanto and Unova) resolve correctly, with no manual region input.

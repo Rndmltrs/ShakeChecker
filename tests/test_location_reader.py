@@ -7,8 +7,8 @@ import pytest
 
 import dex.location_reader
 from battle.battle_reader import load_calibration
-from dex.location_reader import clean_location, is_cave_location, read_location
 from core.utils import parse_coord
+from dex.location_reader import clean_location, is_cave_location, read_location
 
 dex.location_reader.OCR_THROTTLE_S = 0.0
 
