@@ -212,8 +212,8 @@ class BaseOverlay(QWidget):
         self._settings_btn = QPushButton()
         self._settings_btn.setToolTip("Profiles: create / load / delete")
 
-        self.setup_middle_btn()
         self._bar.addWidget(self._settings_btn)
+        self.setup_middle_btn()
         self._settings_btn.clicked.connect(self._on_settings_click)
 
         for b in (self._mode_btn, self._settings_btn):
