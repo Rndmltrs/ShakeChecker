@@ -56,20 +56,38 @@ function Invoke-Bootstrap {
     # --------------------------------------------------------------------------
     Write-Host "`n  Checking Python..." -ForegroundColor DarkGray
 
+    $pyCmd = "python"
+    $venvArgs = "-m venv .venv"
+    $pyFound = $true
+
     try {
-        $pyVer = & python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-        if ([version]$pyVer -lt [version]"3.11") {
-            Write-Host "`n  Python $pyVer found, but version 3.11+ is required." -ForegroundColor Red
-            Pause
-            return $false
-        }
-        Write-Host "  Python $pyVer — OK" -ForegroundColor Green
+        $pyVer = & $pyCmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Not found" }
     }
     catch {
-        Write-Host "`n  Python not found in PATH." -ForegroundColor Red
+        $pyCmd = "py"
+        $venvArgs = "-3 -m venv .venv"
+        try {
+            $pyVer = & $pyCmd -3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Not found" }
+        }
+        catch {
+            $pyFound = $false
+        }
+    }
+
+    if (-not $pyFound) {
+        Write-Host "`n  Python not found on system. Please install Python 3.11+." -ForegroundColor Red
         Pause
         return $false
     }
+
+    if ([version]$pyVer -lt [version]"3.11") {
+        Write-Host "`n  Python $pyVer found, but version 3.11+ is required." -ForegroundColor Red
+        Pause
+        return $false
+    }
+    Write-Host "  Python $pyVer — OK" -ForegroundColor Green
 
     # --------------------------------------------------------------------------
     # Virtual Environment Setup
@@ -84,7 +102,7 @@ function Invoke-Bootstrap {
         }
         Write-Host ""
         try {
-            $procVenv = Start-Process -FilePath "python" -ArgumentList "-m venv .venv" -WindowStyle Hidden -PassThru
+            $procVenv = Start-Process -FilePath $pyCmd -ArgumentList $venvArgs -WindowStyle Hidden -PassThru
             $spinners = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
             $i = 0
             try { [Console]::CursorVisible = $false } catch {}

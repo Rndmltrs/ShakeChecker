@@ -39,10 +39,11 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4"]
 files = ["src", "scripts", "tests"]
 mypy_path = "src"
 explicit_package_bases = true
-python_version = "3.11"
+python_version = "3.12"
 # Several deps ship no type stubs (mss, pywin32, rapidocr, rapidfuzz); don't fail
 # on their missing imports. Our own code is still checked, and the few unavoidable
 # opencv/PyQt6 stub gaps carry targeted `# type: ignore[code]` with a reason.
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
+disable_error_code = ["annotation-unchecked"]

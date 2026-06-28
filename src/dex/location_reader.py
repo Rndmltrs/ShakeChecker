@@ -177,7 +177,7 @@ def read_location(frame_bgr: np.ndarray, cal: LocationCalibration) -> str:
     PADX = 8
 
     if len(xs) > 0:
-        x1b, x2b = xs.min(), xs.max()
+        x1b, x2b = int(xs.min()), int(xs.max())
         x1b = max(0, x1b - PADX)
         x2b = min(w0 - 1, x2b + PADX, max_width)
 
