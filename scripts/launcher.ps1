@@ -138,7 +138,7 @@ function Invoke-Bootstrap {
     # Dependency Check & Installation
     # --------------------------------------------------------------------------
     # Attempt a fast check by trying to import a core dependency (cv2)
-    $depsCheck = & python -c "import cv2" 2>&1
+    $null = & python -c "import cv2" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "`n  Missing dependencies detected." -ForegroundColor Cyan
 
@@ -364,20 +364,20 @@ function Invoke-Terminal {
         Write-Host "(.venv)" -NoNewline -ForegroundColor Green
 
         # Read first line
-        $input = Read-Host " "
+        $userInput = Read-Host " "
 
         # Capture additional pasted lines (if any)
         while ($Host.UI.RawUI.KeyAvailable) {
             $extra = [Console]::In.ReadLine()
-            if ($extra -ne $null) {
-                $input += "`n$extra"
+            if ($null -ne $extra) {
+                $userInput += "`n$extra"
             }
         }
 
-        if ([string]::IsNullOrWhiteSpace($input)) { continue }
-        if ($input -eq 'q') { break }
+        if ([string]::IsNullOrWhiteSpace($userInput)) { continue }
+        if ($userInput -eq 'q') { break }
 
-        if ($input -eq 'h') {
+        if ($userInput -eq 'h') {
             Write-Host "`n  Command History" -ForegroundColor Cyan
             $all = $cmdHistory.GetEnumerator() | Sort-Object { $_.Value.Count } -Descending
             $hmap = @{}
@@ -392,15 +392,15 @@ function Invoke-Terminal {
             }
             $sel = Read-Host "  Select number"
             if ($hmap.ContainsKey($sel)) {
-                $input = $hmap[$sel]
+                $userInput = $hmap[$sel]
             }
             else { continue }
         }
-        elseif ($map.ContainsKey($input)) {
-            $input = $map[$input]
+        elseif ($map.ContainsKey($userInput)) {
+            $userInput = $map[$userInput]
         }
 
-        $cmd = $input.Trim()
+        $cmd = $userInput.Trim()
         $seq++
         if (-not $cmdHistory.ContainsKey($cmd)) {
             $cmdHistory[$cmd] = @{ Count = 0; Seq = $seq }
@@ -442,8 +442,8 @@ while ($true) {
             Write-Host "  --image <Path>"
             Write-Host "  --list-windows"
             Write-Host ""
-            $args = Read-Host "  Enter arguments"
-            if ($args) { Invoke-PythonApp -ArgsString $args }
+            $userArgs = Read-Host "  Enter arguments"
+            if ($userArgs) { Invoke-PythonApp -ArgsString $userArgs }
         }
         '3' {
             Invoke-Terminal 
