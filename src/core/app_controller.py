@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import enum
 import logging
 import os
@@ -278,21 +279,20 @@ class AppController:
     def _tick(self) -> float:
 
         # Inter-Process Communication (IPC): Watch for a quit signal file created by the
-        # PowerShell launcher. This allows us to intercept the termination request and 
+        # PowerShell launcher. This allows us to intercept the termination request and
         # shut down QApplication gracefully, ensuring our tray icon is cleaned up.
         # We throttle this check to once per second to avoid any unnecessary OS calls.
         if not hasattr(self, "_last_quit_check"):
             self._last_quit_check = 0.0
-        
+
         current_time = time.monotonic()
         if current_time - self._last_quit_check > 1.0:
             self._last_quit_check = current_time
             if os.path.exists(".shakechecker_quit"):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(".shakechecker_quit")
-                except OSError:
-                    pass
                 from PyQt6.QtWidgets import QApplication
+
                 QApplication.quit()
                 return 0.1
 
@@ -632,6 +632,7 @@ class AppController:
         now = self.dex.toggle_caught(dex_id)
         log.info(f"dex: {'marked' if now else 'un-marked'} #{dex_id} as caught")
         self._refresh_dex_panel()
+
     def _force_refresh_loc(self) -> None:
         if hasattr(self, "dex_controller"):
             self.dex_controller._last_hud = ""

@@ -152,6 +152,7 @@ class BattlePanel(BaseOverlay):
         self._status.setVisible(False)
 
         from ui.ui_components import SpinnerButton
+
         self._refresh_btn = SpinnerButton(15)
         self._refresh_btn.clicked.connect(self._on_refresh_clicked)
 
