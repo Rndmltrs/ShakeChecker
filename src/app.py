@@ -338,6 +338,7 @@ def run(
         code = app.exec()
     finally:
         loop.ocr.chat_reader.shutdown()
+        _tray.hide()
     sys.exit(code)
 
 

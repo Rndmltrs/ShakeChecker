@@ -274,7 +274,13 @@ function Invoke-PythonApp {
         $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         if ($key.Character -eq 'q' -or $key.Character -eq 'Q') {
             Write-Host "`n  Terminating..." -ForegroundColor Yellow
-            $proc.Kill()
+            # Use file-based IPC to signal the Python process to shut down gracefully.
+            # This allows Python to run cleanup blocks (e.g. removing the tray icon)
+            # before we force-kill it if it hangs.
+            New-Item -ItemType File -Path ".shakechecker_quit" -Force | Out-Null
+            if (-not $proc.WaitForExit(2000)) {
+                $proc.Kill()
+            }
             break
         }
     }
@@ -522,18 +528,6 @@ while ($true) {
             Pause
         }
         '8' {
-            Clear-Host
-            Write-Host "`n  Cleaning environment..." -ForegroundColor Cyan
-            $targets = @("build", "dist", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".pycache", "src\*.egg-info")
-            
-            if (Test-Path ".venv") {
-                $delVenv = Read-Host "  Do you want to completely remove the virtual environment? (Y/N)"
-                if ($delVenv -match '^[Yy]') {
-                    $targets = @(".venv") + $targets
-                }
-            }
-
-            $oldProg = $ProgressPreference
             $ProgressPreference = 'SilentlyContinue'
             foreach ($t in $targets) {
                 if (Test-Path $t) {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import logging
+import os
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
@@ -275,6 +276,25 @@ class AppController:
                     handle.setTransientParent(proxy)
 
     def _tick(self) -> float:
+
+        # Inter-Process Communication (IPC): Watch for a quit signal file created by the
+        # PowerShell launcher. This allows us to intercept the termination request and 
+        # shut down QApplication gracefully, ensuring our tray icon is cleaned up.
+        # We throttle this check to once per second to avoid any unnecessary OS calls.
+        if not hasattr(self, "_last_quit_check"):
+            self._last_quit_check = 0.0
+        
+        current_time = time.monotonic()
+        if current_time - self._last_quit_check > 1.0:
+            self._last_quit_check = current_time
+            if os.path.exists(".shakechecker_quit"):
+                try:
+                    os.remove(".shakechecker_quit")
+                except OSError:
+                    pass
+                from PyQt6.QtWidgets import QApplication
+                QApplication.quit()
+                return 0.1
 
         if self.state is AppState.WAITING:
             self.hwnd = find_pokemmo_hwnd()
