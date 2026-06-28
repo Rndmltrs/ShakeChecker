@@ -30,7 +30,8 @@ function Show-Header {
     Write-Host ""
     if ($IsInstaller) {
         Write-Host "    [System Initialization & Installer]" -ForegroundColor Cyan
-    } else {
+    }
+    else {
         Write-Host "    [Environment: Active]" -ForegroundColor Green
     }
     Write-Host "    ----------------------------------------" -ForegroundColor DarkGray
@@ -123,7 +124,7 @@ function Invoke-Bootstrap {
     if ($LASTEXITCODE -ne 0) {
         Write-Host "`n  Missing dependencies detected." -ForegroundColor Cyan
 
-        $confirm = Read-Host "  Do you want to install them now? (~200 MB) (Y/N)"
+        $confirm = Read-Host "  Do you want to install them now? (~600 MB) (Y/N)"
         if ($confirm -notmatch '^[Yy]') {
             Write-Host "`n  Installation aborted." -ForegroundColor Red
             Pause
@@ -148,7 +149,7 @@ function Invoke-Bootstrap {
             $uvErr = Join-Path $env:TEMP "uv_bootstrap_err_$([guid]::NewGuid()).log"
             $procUv = Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "-m pip install uv -q" -WindowStyle Hidden -RedirectStandardOutput $uvLog -RedirectStandardError $uvErr -PassThru
             while (-not $procUv.HasExited) {
-                Write-Host "`r  $($spinners[$i]) Bootstrapping accelerated installer...     " -NoNewline -ForegroundColor DarkGray
+                Write-Host "`r  $($spinners[$i]) Preparing installation...                  " -NoNewline -ForegroundColor DarkGray
                 $i = ($i + 1) % $spinners.Length
                 Start-Sleep -Milliseconds 80
             }
@@ -167,7 +168,7 @@ function Invoke-Bootstrap {
             $procInstall = Start-Process -FilePath ".\.venv\Scripts\uv.exe" -ArgumentList "pip install --python .\.venv -e `".[dev]`"" -WindowStyle Hidden -RedirectStandardOutput $installLog -RedirectStandardError $installErr -PassThru
             
             while (-not $procInstall.HasExited) {
-                Write-Host "`r  $($spinners[$i]) Installing dependencies (uv concurrent)...    " -NoNewline -ForegroundColor Yellow
+                Write-Host "`r  $($spinners[$i]) Installing dependencies...    " -NoNewline -ForegroundColor Yellow
                 $i = ($i + 1) % $spinners.Length
                 Start-Sleep -Milliseconds 80
             }
@@ -178,7 +179,8 @@ function Invoke-Bootstrap {
             if ($procInstall.ExitCode -eq 0) {
                 Write-Host "  Dependencies installed. [100%]" -ForegroundColor Green
                 $isFreshInstall = $true
-            } else {
+            }
+            else {
                 Write-Host "  Dependency installation failed." -ForegroundColor Red
                 Get-Content $installLog -ErrorAction SilentlyContinue | Write-Host -ForegroundColor DarkGray
                 Get-Content $installErr -ErrorAction SilentlyContinue | Write-Host -ForegroundColor DarkRed
@@ -225,7 +227,8 @@ function Invoke-Bootstrap {
                 $shortcut.Save()
                 Write-Host "  Shortcut created successfully!" -ForegroundColor Green
                 Start-Sleep -Milliseconds 600
-            } catch {
+            }
+            catch {
                 Write-Host "  [Debug] Failed to create shortcut: $($_.Exception.Message)" -ForegroundColor DarkGray
             }
         }
