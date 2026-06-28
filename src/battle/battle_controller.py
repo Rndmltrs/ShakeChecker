@@ -96,7 +96,7 @@ class BattleController:
     def force_refresh(self) -> None:
         self.cached = None
         self._trainer_decided = False
-        
+
     def reset(self, now: float) -> None:
         self.cached = None
         self._name_future = None
@@ -235,6 +235,7 @@ class BattleController:
                 }
         elif reading.state is BattleState.MULTI:
             update.is_multi = True
+            update.is_loading = False
             if self.last_line != "multi":
                 update.log_line = "multiple enemy bars (horde): waiting for one to remain"
                 self.last_line = "multi"
@@ -277,6 +278,18 @@ class BattleController:
                 "alpha": False,
                 "is_trainer": True,
             }
+
+            turn_note = f"turn {self.turns.turns_completed + 1}"
+            if self.turns.turns_asleep:
+                turn_note += f", asleep {self.turns.turns_asleep}"
+            line = f"[{turn_note}] Trainer's Pokémon HP {hp_pct:5.1f}% [{status}]"
+
+            if line != self.last_line:
+                if update.log_line:
+                    log.info(update.log_line)
+                update.log_line = line
+                self.last_line = line
+
             return
 
         if self.species_override is not None:

@@ -1,21 +1,23 @@
-from typing import TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING, Any
 
-from PyQt6.QtCore import QRect
 from PyQt6.QtGui import QWindow
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ui.battle_panel import BattlePanel
 from ui.dex_panel import DexPanel
-from ui.ui_overlay import scale_for_window, bring_overlay_above_game
+from ui.ui_overlay import bring_overlay_above_game, scale_for_window
 
 if TYPE_CHECKING:
     from core.settings_controller import Settings
+    from core.window_capture import ClientRect
 
 log = logging.getLogger("shakechecker")
 
+
 class UIManager:
     """Coordinates the visibility, docking, and scaling of the overlay panels."""
+
     def __init__(
         self,
         battle_panel: BattlePanel,
@@ -26,9 +28,9 @@ class UIManager:
         self.dex_panel = dex_panel
         self.settings = settings
         self.mode_override = "auto" if self.settings.auto_switch else "dex"
-        
+
         self._owner_windows: dict[int, QWindow | None] = {}
-        
+
     def _set_owner(self, widget: QWidget | None, owner_hwnd: int) -> None:
         if widget is not None:
             # Force Qt to create the native window handle even if the widget hasn't been shown yet
@@ -70,16 +72,21 @@ class UIManager:
             self.mode_override = "battle"
         else:
             self.mode_override = "dex"
-            
-        self.apply_mode_change(f"manual mode override: {self.mode_override}")
 
-    def apply_mode_change(self, log_msg: str | None = None) -> None:
+        self.apply_mode_change(in_battle, f"manual mode override: {self.mode_override}")
+
+    def apply_mode_change(self, in_battle: bool, log_msg: str | None = None) -> None:
         if self.mode_override == "dex":
             self.battle_panel.hide()
         elif self.mode_override == "battle" and self.dex_panel is not None:
             self.dex_panel.hide_panel()
+        elif self.mode_override == "auto":
+            if in_battle and self.dex_panel is not None:
+                self.dex_panel.hide_panel()
+            elif not in_battle:
+                self.battle_panel.hide()
         QApplication.processEvents()
-        
+
         if log_msg:
             log.info(log_msg)
 
@@ -90,18 +97,14 @@ class UIManager:
             self.mode_override = "auto"
         else:
             self.mode_override = "dex" if in_battle else "battle"
-        self.apply_mode_change(f"auto switch toggled, mode is now: {self.mode_override}")
+        self.apply_mode_change(in_battle, f"auto switch toggled, mode is now: {self.mode_override}")
 
-    def enforce_mode_ui(self, in_battle: bool, client_rect: QRect) -> None:
+    def enforce_mode_ui(self, in_battle: bool, client_rect: "ClientRect") -> None:
         """Applies manual mode override UI forcing and syncs panel positions."""
         if self.mode_override == "dex":
             if self.battle_panel.isVisible():
                 self.battle_panel.hide()
-            if (
-                in_battle
-                and self.dex_panel is not None
-                and not self.dex_panel.isVisible()
-            ):
+            if in_battle and self.dex_panel is not None and not self.dex_panel.isVisible():
                 self.dex_panel.show()
         elif self.mode_override == "battle":
             if self.dex_panel is not None and self.dex_panel.isVisible():
@@ -118,7 +121,13 @@ class UIManager:
                     probs={},
                     is_empty=True,
                 )
-        
+
+        elif self.mode_override == "auto":
+            if in_battle and self.dex_panel is not None and self.dex_panel.isVisible():
+                self.dex_panel.hide_panel()
+            elif not in_battle and self.battle_panel.isVisible():
+                self.battle_panel.hide_battle()
+
         self.sync_panel_positions()
 
     def sync_panel_positions(self) -> None:
@@ -160,7 +169,9 @@ class UIManager:
             self.mode_override = "auto"
         self.battle_panel.hide_battle()
 
-    def update_battle_panel(self, update_state: dict, client_rect, is_loading: bool) -> None:
+    def update_battle_panel(
+        self, update_state: dict[str, Any] | None, client_rect: "ClientRect", is_loading: bool
+    ) -> None:
         if self.mode_override != "dex":
             self.battle_panel.set_loading(is_loading)
             if update_state is not None:
@@ -170,17 +181,15 @@ class UIManager:
                 self.battle_panel.show_battle(**update_state)
                 self.battle_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
 
-    def update_dex_panel(self, view, client_rect, is_loading: bool, in_battle: bool) -> None:
+    def update_dex_panel(
+        self, view: Any, client_rect: "ClientRect", is_loading: bool, in_battle: bool
+    ) -> None:
         if self.dex_panel is not None:
             self.dex_panel.set_loading(is_loading)
-            
+
             if view is not None and (
                 self.mode_override == "dex"
-                or (
-                    self.mode_override == "auto"
-                    and self.settings.auto_switch
-                    and not in_battle
-                )
+                or (self.mode_override == "auto" and self.settings.auto_switch and not in_battle)
             ):
                 self.dex_panel.apply_scale(
                     self.settings.dex_scale or scale_for_window(client_rect.height)

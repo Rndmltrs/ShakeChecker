@@ -13,6 +13,13 @@ log = logging.getLogger("shakechecker")
 
 @dataclass
 class SettingsUpdate:
+    """Represents a batch of state changes originating from the settings UI.
+
+    This object is passed back to the AppController to trigger high-level
+    re-renders, panel toggles, or to route domain intents (like switching
+    profiles or regions) to the DexController.
+    """
+
     battle_panel_state: dict[str, Any] | None = None
     dex_panel_state: dict[str, Any] | None = None
     log_line: str | None = None
@@ -31,6 +38,10 @@ class SettingsUpdate:
 
 
 class SettingsController:
+    """Manages the settings UI and acts as the bridge between the UI callbacks
+    and the persistent settings store. Dispatches SettingsUpdate events upward.
+    """
+
     def __init__(
         self,
         *,

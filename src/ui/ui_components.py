@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSize, Qt, QTimer
-from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap, QTransform
+from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -60,7 +60,9 @@ class SpinnerButton(QPushButton):
     def _update_icon(self) -> None:
         from ui.ui_icons import icon_pixmap
 
-        pm = icon_pixmap("refresh", self._size, "#cfd2d6", angle=self._angle if self._is_loading else 0)
+        pm = icon_pixmap(
+            "refresh", self._size, "#cfd2d6", angle=self._angle if self._is_loading else 0
+        )
         self.setIcon(QIcon(pm))
         self.setIconSize(QSize(self._size, self._size))
         self.setFixedSize(self._size + 6, self._size + 6)

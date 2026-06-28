@@ -13,8 +13,8 @@ the game) until the cursor is over it, then it accepts clicks (icons, per-row
 check-off) and the wheel scrolls. Click-through is toggled via the Win32
 WS_EX_TRANSPARENT extended style; a short timer polls the cursor.
 
-The app wires four callbacks: on_toggle_caught(dex_id), on_select_profile(name),
-on_create_profile(name), get_profiles()->(active, [names]).
+# The app wires four callbacks: on_toggle_caught(dex_id), get_keep_caught(),
+# get_click_to_catch(), and on_force_refresh().
 
 Preview without the game:  python src/dex_panel.py
 """
@@ -85,7 +85,6 @@ class DexPanel(BaseOverlay):
         self._loader = loader or SpriteLoader()
         self._sprite_h = BASE_SPRITE_H
         self._legend: QWidget | None = None
-        self._profiles: QWidget | None = None  # profile management popup
         self._rows: list[DexSpeciesRow] = []  # reused row-widget pool, grown as needed
 
         # Close the header popups when ShakeChecker stops being the active app,
@@ -275,20 +274,10 @@ class DexPanel(BaseOverlay):
             pass
         self._legend = None
 
-        try:
-            if self._profiles is not None and self._profiles.isVisible():
-                self._profiles.close()
-        except RuntimeError:
-            pass
-        self._profiles = None
-
     def _on_app_state_changed(self, state: Qt.ApplicationState) -> None:
         # Close the header popups when focus leaves ShakeChecker for the game.
         # Our own modal dialogs (new/delete profile) keep the app Active, so this
         # never fires while one is open.
-        if state == Qt.ApplicationState.ApplicationInactive:
-            self._hide_popups()
-
         if state == Qt.ApplicationState.ApplicationInactive:
             self._hide_popups()
 
@@ -312,9 +301,6 @@ class DexPanel(BaseOverlay):
         from ui.ui_components import build_legend
 
         self._legend = build_legend(self, parent_widget)
-        self._legend.move(self._info_btn.mapToGlobal(self._info_btn.rect().bottomRight()))
-        self._legend.show()
-
         self._legend.move(self._info_btn.mapToGlobal(self._info_btn.rect().bottomRight()))
         self._legend.show()
 
@@ -356,6 +342,4 @@ class DexPanel(BaseOverlay):
         # the content to overflow the viewport by ~6px, triggering scrollbar oscillation.
         content = visible * (row_h + spacing)
         cap = DEX_MAX_VISIBLE_ROWS * row_h + (DEX_MAX_VISIBLE_ROWS - 1) * spacing
-        self._scroll.setFixedHeight(min(content, cap))
-
         self._scroll.setFixedHeight(min(content, cap))

@@ -1,10 +1,16 @@
-import sys
+# ruff: noqa: E501
+import re
 
-with open(r"c:\Users\hailo\Desktop\ShakeChecker-Fork\src\core\app_controller.py", "r", encoding="utf-8") as f:
+with open(
+    r"c:\Users\hailo\Desktop\ShakeChecker-Fork\src\core\app_controller.py", encoding="utf-8"
+) as f:
     content = f.read()
 
 # 1. Imports
-content = content.replace("from core.window_capture import (", "from ui.ui_manager import UIManager\nfrom core.window_capture import (")
+content = content.replace(
+    "from core.window_capture import (",
+    "from ui.ui_manager import UIManager\nfrom core.window_capture import (",
+)
 
 # 2. Init body UI manager
 old_init = """        self.battle_controller = battle_controller
@@ -77,13 +83,13 @@ old_start = """        self.pool.submit(_load_ocr)
 
 new_start = """        self.pool.submit(_load_ocr)
         log.info("waiting for PokeMMO window...")
-        
+
         # Inter-Process Communication (IPC): Watch for a quit signal file created by the
         # PowerShell launcher.
         self._quit_timer = QTimer()
         self._quit_timer.timeout.connect(self._check_quit)
         self._quit_timer.start(1000)
-        
+
         QTimer.singleShot(0, self.step)
 
     def _check_quit(self) -> None:
@@ -95,8 +101,13 @@ new_start = """        self.pool.submit(_load_ocr)
 content = content.replace(old_start, new_start)
 
 # 5. Remove _apply_mode_change, _on_mode_toggle
-import re
-content = re.sub(r"    def _apply_mode_change\(self, log_msg: str\) -> None:\n(?:        .*?\n)+?    def _handle_settings_update", "    def _handle_settings_update", content, flags=re.MULTILINE)
+
+content = re.sub(
+    r"    def _apply_mode_change\(self, log_msg: str\) -> None:\n(?:        .*?\n)+?    def _handle_settings_update",
+    "    def _handle_settings_update",
+    content,
+    flags=re.MULTILINE,
+)
 
 
 # 6. Simplify _handle_settings_update
@@ -163,7 +174,12 @@ new_handle_settings = """    def _handle_settings_update(self, update: SettingsU
 content = content.replace(old_handle_settings, new_handle_settings)
 
 # Remove _set_owner
-content = re.sub(r"    def _set_owner\(self, widget: QWidget \| None, owner_hwnd: int\) -> None:\n(?:        .*?\n)+?    def _tick", "    def _tick", content, flags=re.MULTILINE)
+content = re.sub(
+    r"    def _set_owner\(self, widget: QWidget \| None, owner_hwnd: int\) -> None:\n(?:        .*?\n)+?    def _tick",
+    "    def _tick",
+    content,
+    flags=re.MULTILINE,
+)
 
 # Remove IPC check from _tick
 old_tick_start = """    def _tick(self) -> float:
@@ -189,7 +205,7 @@ old_tick_start = """    def _tick(self) -> float:
         if self.state is AppState.WAITING:"""
 new_tick_start = """    def _tick(self) -> float:
         now = time.monotonic()
-        
+
         if self.state is AppState.WAITING:"""
 content = content.replace(old_tick_start, new_tick_start)
 
@@ -234,11 +250,13 @@ content = content.replace(old_win_lost, new_win_lost)
 
 
 # Update battle needs_reading self.mode_override => self.ui_manager.mode_override
-content = content.replace("self.mode_override != \"dex\"", "self.ui_manager.mode_override != \"dex\"")
-content = content.replace("self.mode_override == \"auto\"", "self.ui_manager.mode_override == \"auto\"")
+content = content.replace('self.mode_override != "dex"', 'self.ui_manager.mode_override != "dex"')
+content = content.replace('self.mode_override == "auto"', 'self.ui_manager.mode_override == "auto"')
 
 # now is defined earlier, remove "now = time.monotonic()"
-content = content.replace("self._last_frame = frame\n        now = time.monotonic()\n", "self._last_frame = frame\n")
+content = content.replace(
+    "self._last_frame = frame\n        now = time.monotonic()\n", "self._last_frame = frame\n"
+)
 
 # Update auto mode in battle detected
 old_battle_start = """            if self.state is not AppState.BATTLE:
@@ -382,30 +400,38 @@ new_dex_update = """            self.ui_manager.update_dex_panel(dex_update.loca
 content = content.replace(old_dex_update, new_dex_update)
 
 # force refresh loc
-content = content.replace("""    def _force_refresh_loc(self) -> None:
+content = content.replace(
+    """    def _force_refresh_loc(self) -> None:
         if hasattr(self, "dex_controller"):
             self.dex_controller.force_refresh()
         self._last_hud = ""
         self._last_loc_mask = None
-        log.info("Forced location refresh via Dex panel")""", """    def _force_refresh_loc(self) -> None:
+        log.info("Forced location refresh via Dex panel")""",
+    """    def _force_refresh_loc(self) -> None:
         if hasattr(self, "dex_controller"):
             self.dex_controller.force_refresh()
         self._last_hud = ""
-        log.info("Forced location refresh via Dex panel")""")
+        log.info("Forced location refresh via Dex panel")""",
+)
 
 # force refresh battle
-content = content.replace("""    def _force_refresh_battle(self) -> None:
+content = content.replace(
+    """    def _force_refresh_battle(self) -> None:
         self._was_horde = False
         self._loc_read = False
         if hasattr(self, "battle_controller"):
             self.battle_controller.force_refresh()
-        log.info("Forced battle state refresh via Battle panel")""", """    def _force_refresh_battle(self) -> None:
+        log.info("Forced battle state refresh via Battle panel")""",
+    """    def _force_refresh_battle(self) -> None:
         if hasattr(self, "battle_controller"):
             self.battle_controller.force_refresh()
-        log.info("Forced battle state refresh via Battle panel")""")
+        log.info("Forced battle state refresh via Battle panel")""",
+)
 
 
-with open(r"c:\Users\hailo\Desktop\ShakeChecker-Fork\src\core\app_controller.py", "w", encoding="utf-8") as f:
+with open(
+    r"c:\Users\hailo\Desktop\ShakeChecker-Fork\src\core\app_controller.py", "w", encoding="utf-8"
+) as f:
     f.write(content)
 
 print("Done")

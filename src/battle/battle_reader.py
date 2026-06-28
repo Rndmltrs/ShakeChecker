@@ -591,6 +591,20 @@ def is_battle_ui_present(frame_bgr: np.ndarray, cal: BattleUiCalibration) -> boo
     return float(np.mean(gray < cal.dark_val_max)) >= cal.min_dark_frac
 
 
+def get_ui_brightness(frame_bgr: np.ndarray, cal: BattleUiCalibration) -> float:
+    """Mean grayscale brightness of the battle command panel region."""
+    h, w = frame_bgr.shape[:2]
+    y1 = int(cal.top) if cal.top > 1.0 else int(h * cal.top)
+    y2 = int(cal.bottom) if cal.bottom > 1.0 else int(h * cal.bottom)
+    x1 = int(cal.left) if cal.left > 1.0 else int(w * cal.left)
+    x2 = int(cal.right) if cal.right > 1.0 else int(w * cal.right)
+    band = frame_bgr[y1:y2, x1:x2]
+    if band.size == 0:
+        return 0.0
+    gray = cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
+    return float(np.mean(gray))
+
+
 def is_trainer_battle(frame_bgr: np.ndarray, bar: BarReading, cal: TrainerCalibration) -> bool:
     """
     True if the enemy bar belongs to a TRAINER battle.

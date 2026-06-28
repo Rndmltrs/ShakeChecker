@@ -55,13 +55,38 @@ class DexController:
             return self.dex.record_caught(species_id)
         return False
 
+    def toggle_caught(self, species_id: int) -> None:
+        """Proxy to toggle a catch in the dex session."""
+        if self.dex is not None:
+            self.dex.toggle_caught(species_id)
+
+    def get_current_view(self) -> LocationView | None:
+        """Return the current location view, or a loading placeholder if starting up."""
+        if self.dex is None:
+            return None
+
+        if not self._last_hud:
+            from core.game_time import Period
+
+            return LocationView(
+                route="Reading location...",
+                region="Please wait",
+                period=Period.DAY,
+                season=0,
+                entries=[],
+            )
+
+        return self.dex.on_location(self._last_hud)
+
     def reset_loc_check(self) -> None:
         """Force the next overworld frame to re-evaluate location."""
         self._last_loc_check = 0.0
 
     def force_refresh(self) -> None:
         self._last_hud = ""
+        self._loc_ocr_raw = ""
         self._last_loc_mask = None
+        location_reader.clear_cache()
 
     def override_region(self, region: str | None) -> None:
         if self.dex is not None:
@@ -169,8 +194,38 @@ class DexController:
         log_line = None
 
         if self.dex is not None:
-            if not self._last_hud and self._loc_future is not None:
-                # Placeholder UI while first location reads
+            hud_name = self._loc_ocr_raw
+            # Debounce OCR jitter
+            if self._last_hud and hud_name:
+                import re
+
+                from rapidfuzz import fuzz
+
+                def extract_digits(s: str) -> tuple[str, ...]:
+                    return tuple(re.findall(r"\d+", s))
+
+                if (
+                    extract_digits(hud_name) == extract_digits(self._last_hud)
+                    and fuzz.ratio(hud_name.lower(), self._last_hud.lower()) >= 75.0
+                    and not self.dex.is_exact_location(hud_name)
+                ):
+                    hud_name = self._last_hud
+                    self._loc_ocr_raw = hud_name
+
+            # Normal update
+            view = self.dex.on_location(hud_name)
+            if view is not None:
+                location_view = view
+                if view.route != self._last_hud:
+                    self._last_hud = view.route
+                    entries_count = len(view.entries)
+                    match_status = (
+                        "matched" if self.dex.is_exact_location(view.route) else "dynamic"
+                    )
+                    log_line = f"dex: [{match_status}] {view.route} ({entries_count} missing)"
+
+            if location_view is None and not self._last_hud:
+                # Placeholder UI while first location reads or waiting for one
                 from core.game_time import Period
 
                 location_view = LocationView(
@@ -180,33 +235,6 @@ class DexController:
                     season=0,
                     entries=[],
                 )
-            else:
-                hud_name = self._loc_ocr_raw
-                # Debounce OCR jitter
-                if self._last_hud and hud_name:
-                    import re
-
-                    from rapidfuzz import fuzz
-
-                    def extract_digits(s: str) -> tuple[str, ...]:
-                        return tuple(re.findall(r"\d+", s))
-
-                    if (
-                        extract_digits(hud_name) == extract_digits(self._last_hud)
-                        and fuzz.ratio(hud_name.lower(), self._last_hud.lower()) >= 75.0
-                        and not self.dex.is_exact_location(hud_name)
-                    ):
-                        hud_name = self._last_hud
-                        self._loc_ocr_raw = hud_name
-
-                # Normal update
-                view = self.dex.on_location(hud_name)
-                if view is not None:
-                    location_view = view
-                    if view.route != self._last_hud:
-                        self._last_hud = view.route
-                        entries_count = len(view.entries)
-                        log_line = f"dex: {view.route} ({entries_count} missing)"
 
         return DexUpdate(
             location_text=self._loc_ocr_raw,

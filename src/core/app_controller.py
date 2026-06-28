@@ -5,22 +5,19 @@ import enum
 import logging
 import os
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor
 
-import numpy as np
 from PyQt6.QtCore import QRect, QTimer
 from PyQt6.QtGui import QWindow
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from battle.battle_controller import BattleController, BattleFrame
-from battle.battle_logic import battle_end_grace, debounce_battle, is_in_battle
+from battle.battle_detector import BattleDetector, BattleDetectorState
 from battle.battle_reader import Calibration
 from core import paths
 from core.services import AppConfig, OcrServices
 from core.settings_controller import SettingsController, SettingsUpdate
 from core.vision_controller import VisionController
-from ui.ui_manager import UIManager
 from core.window_capture import (
     WindowCapture,
     find_pokemmo_hwnd,
@@ -32,6 +29,7 @@ from dex.dex_controller import DexController, DexFrame
 from dex.dex_session import DexSession
 from ui.battle_panel import BattlePanel
 from ui.dex_panel import DexPanel
+from ui.ui_manager import UIManager
 from ui.ui_overlay import scale_for_window
 
 
@@ -93,6 +91,7 @@ class AppController:
         self.battle_controller = battle_controller
         self.dex_controller = dex_controller
         self.settings_controller = settings_controller
+        self.battle_detector = BattleDetector(self.config)
         self.ui_manager = UIManager(self.battle_panel, self.dex_panel, self.settings)
 
         self.battle_panel.set_hidden_names(self.settings_controller.hidden_ball_names())
@@ -100,7 +99,9 @@ class AppController:
         self.vision_controller = vision_controller
 
         if self.dex_panel is not None:
-            self.dex_panel.on_mode_toggle = lambda: self.ui_manager.toggle_mode(self.state == AppState.BATTLE)
+            self.dex_panel.on_mode_toggle = lambda: self.ui_manager.toggle_mode(
+                self.state == AppState.BATTLE
+            )
             self.dex_panel.on_settings_click = lambda anchor: self.settings_controller.show(
                 mode="dex", anchor_pos=anchor
             )
@@ -108,7 +109,9 @@ class AppController:
         self.battle_panel.on_settings_click = lambda anchor: self.settings_controller.show(
             mode="battle", anchor_pos=anchor
         )
-        self.battle_panel.on_mode_toggle = lambda: self.ui_manager.toggle_mode(self.state == AppState.BATTLE)
+        self.battle_panel.on_mode_toggle = lambda: self.ui_manager.toggle_mode(
+            self.state == AppState.BATTLE
+        )
         self.battle_panel.get_ball_state = self.settings_controller.ball_state
         self.battle_panel.on_toggle_ball = self.settings_controller.toggle_ball
         self.battle_panel.on_set_all_balls = self.settings_controller.set_all_balls
@@ -117,8 +120,6 @@ class AppController:
 
         self._last_hud = ""  # last resolved HUD location (drives dex panel refresh)
         self._loc_ocr_raw = ""  # last raw OCR text (tracks what the screen actually shows)
-        self._battle_debounce: int = 0  # frame counter for debounce_battle
-        self._stable_in_battle: bool = False  # debounced battle membership
         self._dex_log = ""  # last printed dex panel text (console dedup)
 
         if self.dex_panel is not None and self.dex is not None:
@@ -147,13 +148,13 @@ class AppController:
 
         self.pool.submit(_load_ocr)
         log.info("waiting for PokeMMO window...")
-        
+
         # Inter-Process Communication (IPC): Watch for a quit signal file created by the
         # PowerShell launcher.
         self._quit_timer = QTimer()
         self._quit_timer.timeout.connect(self._check_quit)
         self._quit_timer.start(1000)
-        
+
         QTimer.singleShot(0, self.step)
 
     def _check_quit(self) -> None:
@@ -161,6 +162,7 @@ class AppController:
             with contextlib.suppress(OSError):
                 os.remove(".shakechecker_quit")
             from PyQt6.QtWidgets import QApplication
+
             QApplication.quit()
 
     def step(self) -> None:
@@ -284,7 +286,7 @@ class AppController:
 
     def _tick(self) -> float:
         now = time.monotonic()
-        
+
         if self.state is AppState.WAITING:
             self.hwnd = find_pokemmo_hwnd()
             if self.hwnd is None:
@@ -336,29 +338,13 @@ class AppController:
         reading = vision.battle_reading_raw
         bt = vision.battle_text_raw
         ui_present = vision.hud_present
-
-        if needs_reading and reading is not None and bt is not None:
-            self._stable_in_battle, self._battle_debounce = debounce_battle(
-                is_in_battle(reading.state, bt), self._battle_debounce
-            )
-            in_battle = self._stable_in_battle
-        else:
-            is_active = (bt.menu_present or bt.action or bt.caught) if bt is not None else False
-            self._stable_in_battle, self._battle_debounce = debounce_battle(
-                is_active, self._battle_debounce
-            )
-            in_battle = self._stable_in_battle
-
-        grace = battle_end_grace(
-            self.battle_controller._is_trainer if hasattr(self, "battle_controller") else False,
-            ui_present,
-            trainer_s=self.config.trainer_end_grace_s,
-            anim_s=self.config.battle_anim_grace_s,
-            normal_s=self.config.battle_end_grace_s,
+        is_trainer = (
+            self.battle_controller._is_trainer if hasattr(self, "battle_controller") else False
         )
 
-        if in_battle:
-            self.last_seen_battle = now
+        det_state, grace, since = self.battle_detector.step(vision, needs_reading, is_trainer, now)
+
+        if det_state == BattleDetectorState.ACTIVE:
             if self.state is not AppState.BATTLE:
                 self.state = AppState.BATTLE
                 self.ui_manager.on_battle_start()
@@ -392,7 +378,7 @@ class AppController:
                 log.info("dex: recorded OT-caught from UI")
 
             self.ui_manager.update_battle_panel(update.panel_state, client_rect, update.is_loading)
-        elif self.state is AppState.BATTLE and now - self.last_seen_battle <= grace:
+        elif det_state == BattleDetectorState.GAP:
             # In a battle but no battle signal this frame (animation gap). Log what
             # dropped out so a false "battle ended" can be diagnosed: which signal
             # is missing and whether ui_present held the grace at the longer value.
@@ -404,46 +390,46 @@ class AppController:
                 bt.action if bt else "None",
                 bt.caught if bt else "None",
                 grace,
-                now - self.last_seen_battle,
+                since,
             )
-        elif self.state is AppState.BATTLE and now - self.last_seen_battle > grace:
-            self.state = AppState.IDLE
-            self.ui_manager.on_battle_end()
-            self.last_line = ""
-            if (
-                not self.battle_controller._caught_printed
-            ):  # after a catch we already said "caught X!"
-                log.info("battle ended")
-            self._battle_debounce = 0
-            self._stable_in_battle = False
-            self.vision_controller.reset()
-            # Show the dex panel at once, from the pre-battle location (you can't
-            # move during a battle, so it's still valid) -- no wait for the next
-            # throttled OCR tick. _last_loc_check is reset so OCR re-confirms soon.
-            self.dex_controller.reset_loc_check()
-            if self.dex_panel is not None and self.dex is not None and self.settings.auto_switch:
-                # Restore the dex panel immediately using the pre-battle location
-                # (position hasn't changed during the battle). If the location
-                # isn't known yet, show a loading state so the panel is visible;
-                # the next throttled OCR tick will fill it in.
-                view = (
-                    self.dex.on_location(self.dex_controller._last_hud)
-                    if self.dex_controller._last_hud
-                    else None
-                )
-                self.dex_panel.apply_scale(
-                    self.settings.dex_scale or scale_for_window(client_rect.height)
-                )
-                if view is not None:
-                    self.dex_panel.show_here(view)
-                else:
-                    self.dex_panel.show()
-                self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+        elif det_state == BattleDetectorState.IDLE:
+            if self.state is AppState.BATTLE:
+                self.state = AppState.IDLE
+                self.ui_manager.on_battle_end()
+                self.last_line = ""
+                if (
+                    not self.battle_controller._caught_printed
+                ):  # after a catch we already said "caught X!"
+                    log.info("battle ended")
+                self.vision_controller.reset()
+                # Show the dex panel at once, from the pre-battle location (you can't
+                # move during a battle, so it's still valid) -- no wait for the next
+                # throttled OCR tick. _last_loc_check is reset so OCR re-confirms soon.
+                self.dex_controller.reset_loc_check()
+                if (
+                    self.dex_panel is not None
+                    and self.dex is not None
+                    and self.settings.auto_switch
+                ):
+                    # Restore the dex panel immediately using the pre-battle location
+                    # (position hasn't changed during the battle). If the location
+                    # isn't known yet, show a loading state so the panel is visible;
+                    # the next throttled OCR tick will fill it in.
+                    view = self.dex_controller.get_current_view()
+                    self.dex_panel.apply_scale(
+                        self.settings.dex_scale or scale_for_window(client_rect.height)
+                    )
+                    if view is not None:
+                        self.dex_panel.show_here(view)
+                    else:
+                        self.dex_panel.show()
+                    self.dex_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
 
         # Walking around (not in battle): refresh the "missing here" dex panel from
         # the HUD location on a throttle (location OCR is slow, location changes
         # slowly). Skipped during battles, where the location is read once instead.
         if self.dex is not None:
+            in_battle = self.state == AppState.BATTLE
             h, w = frame.shape[:2]
             y1 = (
                 int(self.cal.location.top)
@@ -478,7 +464,9 @@ class AppController:
                 log.info(dex_update.log_line)
                 self._dex_log = dex_update.log_line
 
-            self.ui_manager.update_dex_panel(dex_update.location_view, client_rect, dex_update.is_loading, in_battle)
+            self.ui_manager.update_dex_panel(
+                dex_update.location_view, client_rect, dex_update.is_loading, in_battle
+            )
 
         self.ui_manager.enforce_mode_ui(self.state == AppState.BATTLE, client_rect)
 
@@ -493,24 +481,10 @@ class AppController:
     def _refresh_dex_panel(self) -> None:
         """Re-render the panel for the current location (after a toggle/profile
         change) so the moved species and counts update immediately."""
-        if self.dex is None or self.dex_panel is None:
-            return
-        if not self.dex_controller._last_hud:
-            if getattr(self.dex_controller, "_loc_future", None) is not None:
-                from core.game_time import Period
-                from dex.dex_structures import LocationView
-
-                dummy_view = LocationView(
-                    route="Reading location...",
-                    region="Please wait",
-                    period=Period.DAY,
-                    season=0,
-                    entries=[],
-                )
-                self.dex_panel.show_here(dummy_view)
+        if self.dex_panel is None:
             return
 
-        view = self.dex.on_location(self.dex_controller._last_hud)
+        view = self.dex_controller.get_current_view()
         if view is not None:
             self.dex_panel.show_here(view)
 
@@ -522,10 +496,9 @@ class AppController:
             trigger_debug_dump(self._last_frame, reading, self.cal)
 
     def _dex_toggle_caught(self, dex_id: int) -> None:
-        if self.dex is None:
-            return
-        now = self.dex.toggle_caught(dex_id)
-        log.info(f"dex: {'marked' if now else 'un-marked'} #{dex_id} as caught")
+        """Called when a user manually clicks a dex panel entry."""
+        self.dex_controller.toggle_caught(dex_id)
+        log.info(f"dex: manually toggled species {dex_id}")
         self._refresh_dex_panel()
 
     def _force_refresh_loc(self) -> None:

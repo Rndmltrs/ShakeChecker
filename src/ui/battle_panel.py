@@ -119,6 +119,12 @@ class BattlePanel(BaseOverlay):
         self.on_force_refresh: Callable[[], None] | None = None
         self._balls: QWidget | None = None
 
+        from PyQt6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            app.applicationStateChanged.connect(self._on_app_state_changed)
+
         self._sprite_h = BASE_SPRITE_H
         self._level_px = BASE_LEVEL_PX
         self._init_header()
@@ -318,11 +324,12 @@ class BattlePanel(BaseOverlay):
                 self._sub.setText(subheader_text(catch_rate, turn))
             self._hp.setText(f"HP: {hp_pct:.0f}%" if hp_pct is not None else "")
             self._set_status(status)
-        if is_trainer or is_empty or not probs:
+
+        if is_trainer or is_empty or dex_id == 0 or (not probs and not unknown):
             order = []
         else:
-            for name, row in self._ball_rows.items():
-                prob = probs.get(name)
+            for ball_name, row in self._ball_rows.items():
+                prob = probs.get(ball_name)
                 row.set_prob(prob, unknown)
             order = (
                 unknown_ball_order(self._ball_names, self._hidden_names)
@@ -341,9 +348,10 @@ class BattlePanel(BaseOverlay):
     def _reorder(self, order: list[str], is_empty: bool = False) -> None:
         """Lay the ball rows out in `order` (best % first), hiding the rest. Skips
         the layout work when the order hasn't changed."""
-        if order == self._last_order and is_empty == (self._last_order == []):
+        if order == self._last_order and is_empty == getattr(self, "_last_is_empty", False):
             return
         self._last_order = order
+        self._last_is_empty = is_empty
         # Show the placeholder only in the empty state; hide it when real balls show.
         self._empty_row.setVisible(is_empty)
         for roww in self._ball_rows.values():
@@ -379,11 +387,24 @@ class BattlePanel(BaseOverlay):
             self.setFixedHeight(self.sizeHint().height())
 
     def hide_battle(self) -> None:
+        self._hide_popups()
         if self._movie is not None:
             self._movie.stop()
         self._current_dex = None  # so re-entering a battle restarts the sprite
         if self.isVisible():
             self.hide()
+
+    def _hide_popups(self) -> None:
+        try:
+            if self._balls is not None and self._balls.isVisible():
+                self._balls.close()
+        except RuntimeError:
+            pass
+        self._balls = None
+
+    def _on_app_state_changed(self, state: Qt.ApplicationState) -> None:
+        if state == Qt.ApplicationState.ApplicationInactive:
+            self._hide_popups()
 
     def _on_balls_click(self) -> None:
         pos = self._balls_btn.mapToGlobal(self._balls_btn.rect().bottomLeft())

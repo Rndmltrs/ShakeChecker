@@ -16,6 +16,14 @@ _last_loc_time = 0.0
 
 OCR_THROTTLE_S = 0.25
 
+
+def clear_cache() -> None:
+    global _last_mask, _last_location, _last_loc_time
+    _last_mask = None
+    _last_location = ""
+    _last_loc_time = 0.0
+
+
 _CH_SUFFIX = re.compile(r"\s*c\s*h[\.,\-\s]*\d+.*$", re.IGNORECASE)
 _TITLE_PREFIX = re.compile(r"^\s*pokemmo\s*", re.IGNORECASE)
 
@@ -74,11 +82,13 @@ def _is_main_menu_template(crop_gray: np.ndarray) -> bool:
 
 def clean_location(raw: str) -> str:
     s = _TITLE_PREFIX.sub("", raw.strip())
-    cleaned = _CH_SUFFIX.sub("", s).strip(" .|")
+    cleaned = _CH_SUFFIX.sub("", s)
+    # Strip any trailing punctuation (like stray commas from OCR)
+    cleaned = re.sub(r"[^\w\s]+$", "", cleaned).strip()
 
     # The OCR sometimes jumbles "Loaded ROMs:" into "addedroms:" or "Adedros:"
     lower_clean = cleaned.lower()
-    if any(x in lower_clean for x in ("load", "roms", "added", "aded", "dros")):
+    if any(x in lower_clean for x in ("load", "roms", "added", "aded", "ded", "ded rolls", "dros")):
         return "ShakeChecker"
 
     cleaned = re.sub(r"([a-zA-Z])(\d)", r"\1 \2", cleaned)

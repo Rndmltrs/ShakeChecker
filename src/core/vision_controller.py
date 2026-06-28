@@ -11,6 +11,7 @@ from core.services import AppConfig, OcrServices
 @dataclass
 class VisionUpdate:
     hud_present: bool
+    ui_brightness: float
     enemy_count: int
     battle_text_raw: Any | None
     battle_reading_raw: Any | None
@@ -73,9 +74,10 @@ class VisionController:
             return None
 
         # 3. Detect generic HUD presence
-        from battle.battle_reader import is_battle_ui_present
+        from battle.battle_reader import get_ui_brightness, is_battle_ui_present
 
         hud_present = is_battle_ui_present(frame, self.cal.battle_ui)
+        ui_brightness = get_ui_brightness(frame, self.cal.battle_ui)
 
         # Determine enemy count based on raw reading
         enemy_count = 0
@@ -88,6 +90,7 @@ class VisionController:
         # Update and return raw vision data
         return VisionUpdate(
             hud_present=hud_present,
+            ui_brightness=ui_brightness,
             enemy_count=enemy_count,
             battle_text_raw=self._last_bt,
             battle_reading_raw=self._last_reading if needs_reading else None,

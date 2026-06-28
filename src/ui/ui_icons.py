@@ -65,7 +65,7 @@ def icon_pixmap(kind: str, size: int, color: str, angle: float = 0) -> QPixmap:
         p.translate(cx, cy)
         p.rotate(angle)
         p.translate(-cx, -cy)
-        
+
         ring = QPen(c, size * 0.12, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
         p.setPen(ring)
         r = size * 0.32

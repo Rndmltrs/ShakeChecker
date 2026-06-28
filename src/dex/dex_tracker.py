@@ -96,9 +96,10 @@ class RegionResolver:
 
         # Try routes using the digits-restricted fuzzy match
         keys = self._data._candidate_keys(norm, self.region.upper() if self.region else None)
-        if len(keys) == 1:
-            loc = self._data._locations[keys[0]]
-            return loc["name"]
+        if keys:
+            names = {self._data._locations[k]["name"] for k in keys}
+            if len(names) == 1:
+                return next(iter(names))
 
         return hud_name
 
