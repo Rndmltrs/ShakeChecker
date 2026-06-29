@@ -6,6 +6,7 @@
 ### Key Fork Improvements
 - **Persistent UI:** Dex and battle panels for a smoother, always‑visible overlay experience.
 - **Dynamic Locations:** Intelligent location detection that correctly handles empty/no‑encounter areas.
+- **Trainer Battle Panel:** Live type‑advantage display for the trainers’s current Pokémon.
 - **Asynchronous Architecture:** Thread‑pooled backend with heavily optimized OCR calls for better performance.
 - **Z‑Order Safety:** Safe overlay behavior ensuring panels never appear above unrelated application windows.
 - **Enhanced Region Detection:** Powered by the underlying dynamic‑location system.
