@@ -15,7 +15,20 @@
 * **Improved Location Logic:** Dynamically parses empty locations with enhanced region detection and name resolution.
 * **Overlay & Z-Order Safety:** Implemented strict overlay handling to ensure UI panels remain correctly populated with relevant information without interfering with unrelated application windows.
 * **Developer-Centric Debugging:** Integrated one-click debug tools that export game window captures with color-coded region slices and OCR output for rapid, visual troubleshooting.
-* **Granular User Control:** Added modular settings, including panel auto-switching, caught-status toggles, and region overrides—decoupled from the UI logic for a cleaner experience.
+* **Granular User Control:** Added modular settings, including panel auto-switching, caught-status toggles, and region overrides—decoupled from the UI logic for a cleaner experience. 
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="./docs/demonstration/media/duckveil-city(dex).png" alt="View 1" width="400"/></td>
+    <td><img src="./docs/demonstration/media/duck-wild.png alt="View 2" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="./docs/demonstration/media/duck-off(trainer).png" alt="View 3" width="400"/></td>
+    <td><img src="./docs/demonstration/media/duck-off(ocrlegend).png" width="400"/></td>
+  </tr>
+</table>
 
 # ShakeChecker Installation & Setup Guide
 
