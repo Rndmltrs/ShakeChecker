@@ -121,7 +121,7 @@ class TypeEffectivenessPanel(QWidget):
         self.r_0x = self._create_row()
 
         self._rows = [self.r_4x, self.r_2x, self.r_05x, self.r_025x, self.r_0x]
-        
+
         # We need 4 dividers between the 5 rows
         self._divs = [self._create_divider() for _ in range(4)]
 
@@ -191,7 +191,7 @@ class TypeEffectivenessPanel(QWidget):
         # the parent panel is made visible, which causes `isVisible()` to return False.
         row_has_content = [bool(w4), bool(w2), bool(r05), bool(r025), bool(im)]
         for i, div in enumerate(self._divs):
-            has_below = any(row_has_content[i+1:])
+            has_below = any(row_has_content[i + 1 :])
             div.setVisible(row_has_content[i] and has_below)
 
     def _populate_row(self, row: _TypeRow, prefix: str, types: list[str], icon_height: int) -> None:
@@ -200,19 +200,18 @@ class TypeEffectivenessPanel(QWidget):
             return
 
         html: list[str] = ['<table width="100%" cellpadding="0" cellspacing="0">']
-        html.append('<tr>')
+        html.append("<tr>")
         html.append('<td align="left" valign="top" width="40">')
         if prefix:
             html.append(
-                f'<span style="color:#d0d0d0; font-size:11px; '
-                f'font-weight:bold;">{prefix}</span>'
+                f'<span style="color:#d0d0d0; font-size:11px; font-weight:bold;">{prefix}</span>'
             )
-        html.append('</td>')
+        html.append("</td>")
 
         html.append('<td align="right" valign="top">')
         for i, t in enumerate(types):
             if i > 0 and i % 3 == 0:
-                html.append('<br>')
+                html.append("<br>")
             t = t.lower()
             p = (
                 Path(__file__).resolve().parent.parent.parent
@@ -222,10 +221,11 @@ class TypeEffectivenessPanel(QWidget):
                 / f"{t}.png"
             )
             html.append(
-                f'&nbsp;<img src="{p.as_posix()}" height="{icon_height}" style="vertical-align: text-bottom;">'
+                f'&nbsp;<img src="{p.as_posix()}" height="{icon_height}" '
+                'style="vertical-align: text-bottom;">'
             )
-        html.append('</td></tr>')
-        html.append('</table>')
+        html.append("</td></tr>")
+        html.append("</table>")
 
         row.setVisible(True)
         row.icons_lbl.setText("".join(html))
@@ -519,6 +519,24 @@ class BattlePanel(BaseOverlay):
             )
         self._reorder(order, is_empty=is_empty)
         self.show()
+
+    def clear(self) -> None:
+        """Wipe the panel's visual state to 'Reading...' without changing window visibility."""
+        self._set_sprite(0)
+        self._alpha_glow.setEnabled(False)
+        self._type_icon_lbl1.setVisible(False)
+        self._type_icon_lbl2.setVisible(False)
+        self._name.setText("Reading...")
+        self._sub.setText("Reading battle...")
+        self._sub.setVisible(True)
+        self._sprite.setVisible(True)
+        self._hp.setVisible(True)
+        self._hp.setText("")
+        self._set_status(None)
+        self._empty_row.setVisible(False)
+        self._last_enemy_types = None
+        self._type_panel.setVisible(False)
+        self._reorder([], is_empty=False)
 
     def set_hidden_names(self, names: set[str]) -> None:
         """Choose which balls the overlay shows (by ball NAME). Hidden balls drop

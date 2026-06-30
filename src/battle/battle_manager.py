@@ -328,6 +328,8 @@ class BattleManager:
         self.hp.reset()
         self.status.reset()
         self.chat.reset()
+        self.species_override = None
+        self.status_override = None
         self._menu_raw = False
         self._menu_streak = 0
         self._menu_stable = False
@@ -337,10 +339,13 @@ class BattleManager:
         """UI-triggered: discard cached species and re-identify from scratch."""
         self.ctx.species = None
         self.ctx.trainer_decided = False
+        self.status_override = None
         self._state = _BattleState.SCANNING
         if self._name_future is not None:
             self._name_future.cancel()
             self._name_future = None
+        self.hp.reset()
+        self.status.reset()
 
     # -----------------------------------------------------------------------
     # Internal: per-frame battle tick
@@ -429,13 +434,16 @@ class BattleManager:
         # ── Trainer detection ──────────────────────────────────────────────
         # scene.is_trainer is already corrected for horde-remnants by Vision.
         # We apply a two-sided delay:
-        #   → Positive (trainer confirmed): lock when menu is stable, to avoid
+        #   → Positive (trainer confirmed): lock immediately when the menu appears, to avoid
         #     false positives from wild encounter slide-in animations.
-        #   → Negative (no strip seen):     wait until the menu has been stable
-        #     for trainer_decide_frames consecutive frames. This filters the
+        #   → Negative (no strip seen): wait for the menu to appear. This filters the
         #     transition animation where a fake HP bar at the name-banner row
         #     makes the strip check fail on the first 1–2 frames.
-        if not self.ctx.trainer_decided and self._menu_stable and scene.state is BattleState.SINGLE:
+        if (
+            not self.ctx.trainer_decided
+            and scene.menu_present
+            and scene.state is BattleState.SINGLE
+        ):
             self._on_trainer_decided(is_trainer=scene.is_trainer)
 
         # ── Catch streak ──────────────────────────────────────────────────

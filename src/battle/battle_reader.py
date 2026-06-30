@@ -388,18 +388,21 @@ def classify_status_box(hsv_box: np.ndarray, cal: StatusCalibration) -> Status:
     def band(rng: tuple[int, int]) -> float:
         return float(np.mean(sat & (h >= rng[0]) & (h <= rng[1])))
 
+    white_frac = float(np.mean((v >= cal.white_val_min) & (s < cal.white_sat_max)))
+
     bands = {
         Status.PAR: band(cal.hue.yellow),
         Status.PSN: band(cal.hue.magenta),
         Status.BRN: band(cal.hue.red),
         Status.FRZ: band(cal.hue.cyan),
+        Status.SLP: white_frac,
     }
+
     best = max(bands, key=lambda k: bands[k])
-    if bands[best] >= cal.band_frac_min:
+    threshold = cal.white_frac_min if best == Status.SLP else cal.band_frac_min
+
+    if bands[best] >= threshold:
         return best
-    white = float(np.mean((v >= cal.white_val_min) & (s < cal.white_sat_max)))
-    if white >= cal.white_frac_min:
-        return Status.SLP
     return Status.NONE
 
 

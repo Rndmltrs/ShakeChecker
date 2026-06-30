@@ -129,6 +129,12 @@ class AppController:
             self.dex_panel.get_click_to_catch = lambda: self.settings.click_to_catch
 
     def start(self) -> None:
+        """Begin the main event loop and background threads."""
+        # Clear any stale IPC quit file from a previous unclean shutdown
+        if os.path.exists(".shakechecker_quit"):
+            with contextlib.suppress(OSError):
+                os.remove(".shakechecker_quit")
+
         log.info(f"ShakeChecker v{paths.APP_VERSION}")
         if self.species_override or self.status_override:
             species_src = (
@@ -177,11 +183,17 @@ class AppController:
         QTimer.singleShot(int(interval_s * 1000), self.step)
 
     def _frame_interval(self) -> float:
-        return (
-            self.config.battle_frame_s
-            if self.state is AppState.BATTLE
-            else self.config.idle_frame_s
-        )
+        from battle.battle_manager import _BattleState
+
+        if self.state is not AppState.BATTLE:
+            return self.config.idle_frame_s
+
+        # During setup and swapping phases, use the fast idle rate to lock on quickly.
+        # Once we reach TRACKING, drop to the slower battle rate to save CPU.
+        if self.battle_manager._state != _BattleState.TRACKING:
+            return self.config.idle_frame_s
+
+        return self.config.battle_frame_s
 
     def _apply_mode_change(self, log_msg: str) -> None:
         self.settings_controller.close()
@@ -366,10 +378,11 @@ class AppController:
         if det_state == BattleDetectorState.ACTIVE:
             if self.state is not AppState.BATTLE:
                 self.state = AppState.BATTLE
-                self.ui_manager.on_battle_start()
+                self.ui_manager.on_battle_start(client_rect)
                 log.info("battle detected")
                 self.battle_manager.reset(now)
                 self._battle_vision.reset()
+                self.ui_manager.enforce_mode_ui(True, client_rect)
                 return self._frame_interval()
 
             if (

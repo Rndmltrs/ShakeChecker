@@ -28,21 +28,24 @@ class StatusSettler:
         if self._committed is None:
             self._committed = status  # first reading shows immediately
             self._candidate = status
-            self._count = 0
+            self._count = self.stable_needed
             return self._committed
-        if status == self._committed:
-            self._candidate = status
-            self._count = 0
-            return self._committed
-        # differs from the committed status: needs to persist to take over
+
+        # If the incoming status matches our current candidate, build confidence.
+        # Once it hits the threshold, it becomes the committed status.
         if status == self._candidate:
-            self._count += 1
+            self._count = min(self._count + 1, self.stable_needed)
+            if self._count == self.stable_needed:
+                self._committed = self._candidate
         else:
-            self._candidate = status
-            self._count = 1
-        if self._count >= self.stable_needed:
-            self._committed = status
-            self._count = 0
+            # Otherwise, drain confidence. If confidence drops to 0,
+            # we switch candidates. This ensures a single frame of noise
+            # doesn't completely wipe out progress toward a new status!
+            self._count -= 1
+            if self._count <= 0:
+                self._candidate = status
+                self._count = 1
+
         return self._committed
 
     def reset(self) -> None:

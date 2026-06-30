@@ -147,13 +147,30 @@ class UIManager:
             self.dex_panel._last_pos = bp_pos
             self.dex_panel.move(*bp_pos)
 
-    def on_battle_start(self) -> None:
+    def on_battle_start(self, client_rect: "ClientRect") -> None:
         if self.settings.auto_switch:
             self.mode_override = "auto"
+
+        # Scale and dock the panel instantly before showing it so it doesn't flash at (0,0)
+        self.battle_panel.apply_scale(
+            self.settings.battle_scale or scale_for_window(client_rect.height)
+        )
+        self.battle_panel.dock_to(client_rect.left, client_rect.top, client_rect.width)
+
+        # Wipe the panel so it doesn't flash stale info from the previous battle.
+        self.battle_panel.clear()
+        self.battle_panel.show()
 
     def on_battle_end(self) -> None:
         if self.settings.auto_switch:
             self.mode_override = "auto"
+
+        # Wipe the panel BEFORE it gets hidden at the end of the battle.
+        # This ensures that Qt's internal window pixel buffer is cleared,
+        # preventing a 1-frame flash of the previous battle's data when
+        # the window is shown again in the next encounter.
+        self.battle_panel.clear()
+        self.battle_panel.repaint()
 
     def update_battle_panel(
         self, update_state: dict[str, Any] | None, client_rect: "ClientRect", is_loading: bool
