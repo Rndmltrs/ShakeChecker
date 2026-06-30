@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from core.game_time import Period, current_period, current_season, season_name  # noqa: E402
-from core.paths import LEGENDARIES_PATH, LOCATION_INDEX_PATH  # noqa: E402
+from core.paths import LEGENDARIES_PATH, ENCOUNTER_INDEX_PATH  # noqa: E402
 from dex.dex_tracker import EncounterData, display_order  # noqa: E402
 
 DATA = ROOT / "data"
@@ -37,7 +37,7 @@ def main() -> None:
     p.add_argument("--all", action="store_true", help="list every missing entry, not just 5 + X")
     args = p.parse_args()
 
-    data = EncounterData.load(LOCATION_INDEX_PATH, LEGENDARIES_PATH)
+    data = EncounterData.load(ENCOUNTER_INDEX_PATH, LEGENDARIES_PATH)
     key = data.match_location(args.location, args.region)
     if key is None:
         print(f"no match for {args.location!r}" + (f" in {args.region}" if args.region else ""))

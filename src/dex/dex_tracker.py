@@ -2,7 +2,7 @@
 
 Pure/injectable: the matching and missing-list logic take plain data so they are
 unit-tested without files or screen capture. EncounterData wraps the vendored
-`location_index.json` (built by scripts/update_data.py) plus the legendary exclusion
+`encounter_index.json` (built by scripts/update_data.py) plus the legendary exclusion
 list and exposes the two operations the app needs:
 
 - match_location(hud_name, region): map the OCR'd HUD location to a data key.

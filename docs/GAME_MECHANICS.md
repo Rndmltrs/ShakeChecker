@@ -41,14 +41,14 @@ ShakeChecker relies on specific single-sources of truth to avoid drifting from g
   - **Unpublished Rates:** `catch_rate` is explicitly `null` for species with no published rate (e.g., roaming Latias, Latios, Mesprit, Cresselia). The overlay safely handles this by displaying `??`.
   - **Hand Corrections:** The roaming birds/beasts (Articuno, Zapdos, Moltres, Raikou, Entei, Suicune) have a catch rate of `3` per the in-client PokeMMO catch calculator, overriding the Hub's default of `5`. Do not "re-sync" these back from the Hub.
 
-- **`location_index.json`** PokeMMO-specific spawn tables tracking which Pokémon appear on which routes. 
+- **`encounter_index.json`** PokeMMO-specific spawn tables tracking which Pokémon appear on which routes. 
   - **Source:** Parsed and inverted directly from `monster.json` provided by [PokeMMO Hub](https://github.com/PokeMMO-Tools/pokemmo-hub).
   - **Constraint:** Do NOT use vanilla PokeAPI encounter tables, as PokeMMO heavily modifies spawns for MMO balance (e.g., Alphas, Swarms, custom level brackets).
 
 ### Data Update Path
 When game updates introduce new mechanics or spawn shifts, data must be refreshed by pulling the latest dumps from PokeMMO Hub:
 1. Execute `scripts/update_species.py` to pull the latest `monster.json` and `catchRates.json` to generate the normalized `species_core.json`.
-2. Execute `scripts/update_locations.py` to parse and invert the `monster.json` encounter data into a location-first hierarchy (`location_index.json`).
+2. Execute `scripts/update_locations.py` to parse and invert the `monster.json` encounter data into a location-first hierarchy (`encounter_index.json`).
 
 ## 4. Vision & OCR Mechanics
 

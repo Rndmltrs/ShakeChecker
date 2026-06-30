@@ -8,7 +8,7 @@ from core.game_time import Period
 from dex.dex_session import DexSession
 from dex.dex_structures import CaughtStore
 from dex.dex_tracker import EncounterData
-from core.paths import AREA_INDEX_PATH, LEGENDARIES_PATH, LOCATION_INDEX_PATH
+from core.paths import AREA_INDEX_PATH, LEGENDARIES_PATH, ENCOUNTER_INDEX_PATH
 
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
@@ -16,7 +16,7 @@ DATA = ROOT / "data"
 
 @pytest.fixture(scope="module")
 def data() -> EncounterData:
-    return EncounterData.load(LOCATION_INDEX_PATH, LEGENDARIES_PATH)
+    return EncounterData.load(ENCOUNTER_INDEX_PATH, LEGENDARIES_PATH)
 
 
 def make_session(data, tmp_path, period=Period.DAY, season=0) -> DexSession:

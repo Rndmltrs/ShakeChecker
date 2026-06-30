@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-from core.paths import LOCATION_INDEX_PATH as OUT_PATH
+from core.paths import ENCOUNTER_INDEX_PATH as OUT_PATH
 URL_DATA = (
     "https://raw.githubusercontent.com/PokeMMO-Tools/pokemmo-hub/main/src/data/pokemmo/monster.json"
 )
