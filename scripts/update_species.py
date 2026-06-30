@@ -135,7 +135,9 @@ def main() -> None:
 
     # Deduplicate types to ensure consistency (e.g. single ['FIRE'] instead of ['FIRE', 'FIRE'])
     for entry in entries:
-        entry["types"] = list(dict.fromkeys(entry["types"]))
+        types = entry.get("types")
+        if isinstance(types, list):
+            entry["types"] = list(dict.fromkeys(types))
 
     # Sort strictly by National Dex ID
     entries.sort(key=lambda x: x["id"])
@@ -149,7 +151,12 @@ def main() -> None:
     if new_species:
         print("\nNew species found:")
         for s in new_species:
-            print(f"  - [{s['id']}] {s['name']} (Types: {', '.join(s['types'])})")
+            types = s.get("types")
+            if isinstance(types, list):
+                types_str = ', '.join(str(t) for t in types)
+            else:
+                types_str = "Unknown"
+            print(f"  - [{s['id']}] {s['name']} (Types: {types_str})")
 
     if new_count - old_count == 0:
         print("\nYour local data is already up to date.")
