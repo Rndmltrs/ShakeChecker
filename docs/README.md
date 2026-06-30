@@ -15,7 +15,36 @@
 * **Improved Location Logic:** Dynamically parses empty locations with enhanced region detection and name resolution.
 * **Overlay & Z-Order Safety:** Implemented strict overlay handling to ensure UI panels remain correctly populated with relevant information without interfering with unrelated application windows.
 * **Developer-Centric Debugging:** Integrated one-click debug tools that export game window captures with color-coded region slices and OCR output for rapid, visual troubleshooting.
-* **Granular User Control:** Added modular settings, including panel auto-switching, caught-status toggles, and region overrides—decoupled from the UI logic for a cleaner experience.
+* **Granular User Control:** Added modular settings, including panel auto-switching, caught-status toggles, and region overrides—decoupled from the UI logic for a cleaner experience. 
+
+## Screenshots
+
+<table>
+  <tr>
+    <td>
+      <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duckveil-city(dex).png">
+        <img src="https://raw.githubusercontent.com/Rndmltrs/ShakeChecker-EX/main/docs/Demonstration/media/duckveil-city(dex).png" alt="View 1" width="400"/>
+      </a>
+    </td>
+    <td>
+      <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-wild.png">
+        <img src="https://raw.githubusercontent.com/Rndmltrs/ShakeChecker-EX/main/docs/Demonstration/media/duck-wild.png" alt="View 2" width="400"/>
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-off(trainer).png">
+        <img src="https://raw.githubusercontent.com/Rndmltrs/ShakeChecker-EX/main/docs/Demonstration/media/duck-off(trainer).png" alt="View 3" width="400"/>
+      </a>
+    </td>
+    <td>
+      <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-off(ocrlegend).png">
+        <img src="https://raw.githubusercontent.com/Rndmltrs/ShakeChecker-EX/main/docs/Demonstration/media/duck-off(ocrlegend).png" alt="View 4" width="400"/>
+      </a>
+    </td>
+  </tr>
+</table>
 
 # ShakeChecker Installation & Setup Guide
 
