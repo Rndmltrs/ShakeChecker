@@ -34,7 +34,7 @@ This guide covers how to set up the ShakeChecker application on your system. The
 * **Running the App**: The launcher provides a menu where you can start the application directly.
 * **Building a Standalone Executable**: If you prefer to run the app without the Python environment, use **Option 3** in the menu. This compiles the project into a portable standalone `.exe` file, which will be created in the `dist\ShakeChecker\` folder.
 * **Desktop Shortcut**: After a successful first installation, the launcher will ask if you would like to create a shortcut on your desktop for quick access.
-* 
+  
 ---
 
 ## Advanced Developer Launcher
