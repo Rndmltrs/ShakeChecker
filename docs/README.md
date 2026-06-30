@@ -19,7 +19,8 @@
 
 ## Screenshots
 
-<table>
+<table align="center">
+  <!-- Top Row -->
   <tr>
     <td>
       <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duckveil-city(dex).png">
@@ -32,6 +33,7 @@
       </a>
     </td>
   </tr>
+  <!-- Bottom Row -->
   <tr>
     <td>
       <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-off(trainer).png">
@@ -41,6 +43,14 @@
     <td>
       <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-off(ocrlegend).png">
         <img src="https://raw.githubusercontent.com/Rndmltrs/ShakeChecker-EX/main/docs/Demonstration/media/duck-off(ocrlegend).png" alt="View 4" width="400"/>
+      </a>
+    </td>
+  </tr>
+  <!-- Launcher Row (Merged to span two columns) -->
+  <tr>
+    <td colspan="2" align="center">
+      <a href="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/shake-launcher.png">
+        <img src="https://raw.githubusercontent.com/Rndmltrs/ShakeChecker-EX/main/docs/Demonstration/media/shake-launcher.png" alt="Shake Launcher" width="400"/>
       </a>
     </td>
   </tr>
