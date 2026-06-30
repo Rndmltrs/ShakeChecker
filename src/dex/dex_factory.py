@@ -8,7 +8,7 @@ import logging
 from core.account_store import AccountConfig
 from core.paths import (
     AREA_INDEX_PATH,
-    ENCOUNTERS_PATH,
+    LOCATION_INDEX_PATH,
     LEGENDARIES_PATH,
     USERDATA,
 )
@@ -22,10 +22,10 @@ def build_dex_session(account_override: str | None) -> DexSession | None:
     """Build the dex session for the active account, or None if the encounter
     data is missing. The active account is chosen manually and remembered: an
     explicit --account wins, else the last used one, else a 'default' profile."""
-    if not ENCOUNTERS_PATH.exists():
-        log.info("dex: encounters.json not found (run scripts/update_data.py) — dex disabled")
+    if not LOCATION_INDEX_PATH.exists():
+        log.info("dex: location_index.json not found (run scripts/update_data.py) — dex disabled")
         return None
-    data = EncounterData.load(ENCOUNTERS_PATH, LEGENDARIES_PATH)
+    data = EncounterData.load(LOCATION_INDEX_PATH, LEGENDARIES_PATH)
 
     raw_idx = json.loads(AREA_INDEX_PATH.read_text("utf-8"))
     area_index = {loc: region for region, locs in raw_idx.items() for loc in locs}

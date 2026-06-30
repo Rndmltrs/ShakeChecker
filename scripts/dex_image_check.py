@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from battle.battle_reader import load_calibration, read_battle, read_caught_icon  # noqa: E402
 from battle.name_reader import NameReader  # noqa: E402
 from core.game_time import Period, season_name  # noqa: E402
+from core.paths import LEGENDARIES_PATH, LOCATION_INDEX_PATH  # noqa: E402
 from core.utils import parse_coord  # noqa: E402
 from dex.dex_session import DexSession  # noqa: E402
 from dex.dex_structures import CaughtStore  # noqa: E402
@@ -48,7 +49,7 @@ def main() -> None:
     args = p.parse_args()
 
     cal = load_calibration(ROOT / "calibration.toml")
-    data = EncounterData.load(DATA / "encounters.json", DATA / "legendaries.json")
+    data = EncounterData.load(LOCATION_INDEX_PATH, LEGENDARIES_PATH)
     name_reader = NameReader(cal.name, DATA / "species_core.json")
 
     # throwaway caught store so the check never writes real account data

@@ -34,7 +34,7 @@ DATA_DIR = resource_root() / "data"
 CALIBRATION_PATH = resource_root() / "calibration.toml"
 SPECIES_PATH = DATA_DIR / "species_core.json"
 TEMPLATES_DIR = DATA_DIR / "templates"
-ENCOUNTERS_PATH = DATA_DIR / "encounters.json"
+LOCATION_INDEX_PATH = DATA_DIR / "location_index.json"
 LEGENDARIES_PATH = DATA_DIR / "legendaries.json"
 AREA_INDEX_PATH = DATA_DIR / "area_index.json"
 

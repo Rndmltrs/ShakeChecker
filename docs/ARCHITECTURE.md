@@ -204,7 +204,7 @@ The Dex operates as an independent, asynchronous subsystem running alongside the
 1. **Trigger:** Fired periodically by `AppController` during `IDLE`.
 2. **Vision (Location OCR):** Crops the top-left HUD and submits it to `location_reader.py`.
 3. **Routing (`DexSession`):** Raw OCR text is fuzzy-matched against `area_index.json` to resolve a canonical location ID.
-4. **Data Aggregation:** `DexSession` cross-references the location with `encounters.json` and the user's `CaughtStore`, building a `LocationView` of missing encounters.
+4. **Data Aggregation:** `DexSession` cross-references the location with `location_index.json` and the user's `CaughtStore`, building a `LocationView` of missing encounters.
 5. **Presentation:** `dex_formatters.py` formats for the console; `UIManager` docks and renders the `DexPanel` overlay.
 6. **Interactivity:** Clicking a Pokémon in the panel fires a callback to `DexSession` to mutate the `CaughtStore` and immediately re-render.
 
@@ -284,7 +284,7 @@ ShakeChecker reads from static data and writes to dynamic local storage.
 
 - **Static Data (Read-Only):**
   - `data/species_core.json`: Base catch rates, typing, and names.
-  - `data/encounters.json`: Global map data linking locations to wild encounters.
+  - `data/location_index.json`: Global map data linking locations to wild encounters.
   - `data/area_index.json`: Fuzzy-matching dictionary used to resolve raw OCR HUD text to canonical locations.
   - `calibration.toml`: X/Y coordinate ratios mapping exactly where UI elements sit on the screen.
 

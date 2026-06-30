@@ -8,6 +8,7 @@ from core.game_time import Period
 from dex.dex_session import DexSession
 from dex.dex_structures import CaughtStore
 from dex.dex_tracker import EncounterData
+from core.paths import AREA_INDEX_PATH, LEGENDARIES_PATH, LOCATION_INDEX_PATH
 
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
@@ -15,13 +16,13 @@ DATA = ROOT / "data"
 
 @pytest.fixture(scope="module")
 def data() -> EncounterData:
-    return EncounterData.load(DATA / "encounters.json", DATA / "legendaries.json")
+    return EncounterData.load(LOCATION_INDEX_PATH, LEGENDARIES_PATH)
 
 
 def make_session(data, tmp_path, period=Period.DAY, season=0) -> DexSession:
     import json
 
-    raw = json.loads((DATA / "area_index.json").read_text("utf-8"))
+    raw = json.loads(AREA_INDEX_PATH.read_text("utf-8"))
     area_index = {loc: r for r, locs in raw.items() for loc in locs}
     caught = CaughtStore.for_account(tmp_path, "Tester")
     return DexSession(data, caught, area_index, period_fn=lambda: period, season_fn=lambda: season)

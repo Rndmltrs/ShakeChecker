@@ -12,9 +12,9 @@ from dex.dex_tracker import (
 )
 
 ROOT = Path(__file__).parent.parent
-ENCOUNTERS = ROOT / "data" / "encounters.json"
-LEGENDARIES = ROOT / "data" / "legendaries.json"
-AREA_INDEX = ROOT / "data" / "area_index.json"
+from core.paths import AREA_INDEX_PATH as AREA_INDEX
+from core.paths import LEGENDARIES_PATH as LEGENDARIES
+from core.paths import LOCATION_INDEX_PATH as ENCOUNTERS
 
 
 def enc(
