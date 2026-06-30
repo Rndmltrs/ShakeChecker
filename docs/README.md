@@ -47,8 +47,8 @@ This fork features a custom PowerShell bootstrap launcher (`launcher.ps1`) desig
     * **Static Type Checking:** `mypy`.
     * **Unit Testing:** `pytest`.
 * **Environment Resilience:** Includes utilities for "clean-slate" environment resets, ensuring dependency conflicts are resolved instantly.
-* **Location & Species Updater:** Quickly update relevant data for locations and species from PokeMMO Hub.
-* <https://github.com/PokeMMO-Tools/pokemmo-hub>
+* **Location & Species Updater:** Quickly update relevant data for locations and species from [PokeMMO Hub]<https://github.com/PokeMMO-Tools/pokemmo-hub>
+  
 
 ---
 
