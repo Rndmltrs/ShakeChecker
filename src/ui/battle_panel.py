@@ -454,6 +454,8 @@ class BattlePanel(BaseOverlay):
         # Render Pokemon's own types next to the level stacked vertically
         self._type_icon_lbl1.setVisible(False)
         self._type_icon_lbl2.setVisible(False)
+        icon_h = self._px(14)
+        
         for i, t in enumerate(enemy_types):
             p = (
                 Path(__file__).resolve().parent.parent.parent
@@ -462,12 +464,14 @@ class BattlePanel(BaseOverlay):
                 / "types"
                 / f"{t.lower()}.png"
             )
-            img_html = f'<img src="file:///{p.as_posix()}" height="14">'
+            img_html = f'<img src="file:///{p.as_posix()}" height="{icon_h}">'
             if i == 0:
                 self._type_icon_lbl1.setText(img_html)
+                self._type_icon_lbl1.setFixedHeight(icon_h)
                 self._type_icon_lbl1.setVisible(True)
             elif i == 1:
                 self._type_icon_lbl2.setText(img_html)
+                self._type_icon_lbl2.setFixedHeight(icon_h)
                 self._type_icon_lbl2.setVisible(True)
 
         lvl = (
