@@ -21,12 +21,12 @@
 
 <table>
   <tr>
-    <td><img src="[One](https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duckveil-city(dex).png?raw=true)" alt="View 1" width="400"/></td>
-    <td><img src="./demonstration/media/duck-wild.png" alt="View 2" width="400"/></td>
+    <td><img src="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duckveil-city(dex).png?raw=true" alt="View 1" width="400"/></td>
+    <td><img src="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-wild.png?raw=true" alt="View 2" width="400"/></td>
   </tr>
   <tr>
-    <td><img src="./demonstration/media/duck-off(trainer).png" alt="View 3" width="400"/></td>
-    <td><img src="./demonstration/media/duck-off(ocrlegend).png" alt="View 4" width="400"/></td>
+    <td><img src="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-off(trainer).png?raw=true" alt="View 3" width="400"/></td>
+    <td><img src="https://github.com/Rndmltrs/ShakeChecker-EX/blob/main/docs/Demonstration/media/duck-off(ocrlegend).png?raw=true" alt="View 4" width="400"/></td>
   </tr>
 </table>
 
