@@ -1,4 +1,4 @@
-# ShakeChecker — Project Fork
+# ShakeChecker EXpanded
 
 **This repository is a hard fork of the original [ghostpixxel/ShakeChecker](https://github.com/ghostpixxel/ShakeChecker) project.**
 
