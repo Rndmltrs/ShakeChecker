@@ -11,8 +11,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 OUT_PATH = DATA / "species_core.json"
-REMOTE_URL = (
-    "https://raw.githubusercontent.com/PokeMMOZone/PokeMMO-Data/main/data/pokemon-data.json"
+URL_DATA = (
+    "https://raw.githubusercontent.com/PokeMMO-Tools/pokemmo-hub/main/src/data/pokemmo/monster.json"
+)
+URL_RATES = (
+    "https://raw.githubusercontent.com/PokeMMO-Tools/pokemmo-hub/main/src/data/catchRates.json"
 )
 
 # PokeMMO Catch Calculator manual overrides (defaults in Hub are 5)
@@ -26,38 +29,79 @@ LEGENDARY_OVERRIDES = {
 }
 
 
+def fetch_json(url: str) -> dict | list:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def main() -> None:
-    print("Fetching latest pokemon-data.json from PokeMMOZone...")
+    print("Fetching latest data dumps from PokeMMO-Hub...")
     try:
-        req = urllib.request.Request(REMOTE_URL, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req) as response:
-            raw = json.loads(response.read().decode("utf-8"))
+        raw_data = fetch_json(URL_DATA)
+        raw_rates = fetch_json(URL_RATES)
     except urllib.error.URLError as e:
         print(f"Error fetching data: {e}", file=sys.stderr)
         sys.exit(1)
 
+    rates_map = {item["id"]: item["rate"] for item in raw_rates if "id" in item and "rate" in item}
+
+    # Load existing data early to preserve names and missing catch rates
+    old_data = []
+    old_map = {}
+    old_ids = set()
+    old_count = 0
+    if OUT_PATH.exists():
+        try:
+            with open(OUT_PATH, encoding="utf-8") as f:
+                old_data = json.load(f)
+                old_count = len(old_data)
+                old_map = {e["id"]: e for e in old_data if "id" in e}
+                old_ids = set(old_map.keys())
+        except Exception:
+            pass
+
     entries = []
-    for key, data in raw.items():
+    
+    # Depending on the source, raw_data might be a list or a dict.
+    data_list = raw_data.values() if isinstance(raw_data, dict) else raw_data
+    
+    for data in data_list:
+        if not isinstance(data, dict):
+            continue
+            
         pid = data.get("id")
         if not pid:
             continue
 
-        # Extract properly capitalized name if available, otherwise fallback
-        name = data.get("name_translations", {}).get("en", {}).get("name")
-        if not name:
-            name = data.get("name", key).title()
+        old_entry = old_map.get(pid, {})
 
-        name = name.replace("’", "'")
+        name = data.get("name", "").replace("’", "'")
 
         types = [t.upper() for t in data.get("types", [])]
-        catch_rate = data.get("capture_rate")
+
+        catch_rate = rates_map.get(pid)
+        # Preserve old catch rates if the new API is missing them (e.g. for custom forms)
+        if catch_rate is None and old_entry and "catch_rate" in old_entry:
+            catch_rate = old_entry["catch_rate"]
         obtainable = data.get("obtainable", False)
 
         ev_yield = {}
-        for stat in data.get("stats", []):
-            effort = stat.get("effort", 0)
-            if effort > 0:
-                ev_yield[stat.get("stat_name")] = effort
+        yields = data.get("yields", {})
+        
+        # Fallback to old 'stats' format if 'yields' doesn't exist
+        if not yields and "stats" in data:
+            for stat in data.get("stats", []):
+                effort = stat.get("effort", 0)
+                if effort > 0:
+                    ev_yield[stat.get("stat_name")] = effort
+        else:
+            if yields.get("ev_hp"): ev_yield["hp"] = yields["ev_hp"]
+            if yields.get("ev_attack"): ev_yield["attack"] = yields["ev_attack"]
+            if yields.get("ev_defense"): ev_yield["defense"] = yields["ev_defense"]
+            if yields.get("ev_sp_attack"): ev_yield["special-attack"] = yields["ev_sp_attack"]
+            if yields.get("ev_sp_defense"): ev_yield["special-defense"] = yields["ev_sp_defense"]
+            if yields.get("ev_speed"): ev_yield["speed"] = yields["ev_speed"]
 
         # Apply hardcoded overrides
         if pid in LEGENDARY_OVERRIDES:
@@ -74,23 +118,11 @@ def main() -> None:
             }
         )
 
-    # Read the old data first to preserve custom PokeMMO IDs (e.g., event bosses)
-    old_ids = set()
-    old_count = 0
-    if OUT_PATH.exists():
-        try:
-            with open(OUT_PATH, encoding="utf-8") as f:
-                old_data = json.load(f)
-                old_count = len(old_data)
-                old_ids = {e["id"] for e in old_data if "id" in e}
-
-                # Merge back any old species that don't exist in the new dataset
-                new_ids = {e["id"] for e in entries}
-                for old_entry in old_data:
-                    if old_entry["id"] not in new_ids:
-                        entries.append(old_entry)
-        except Exception:
-            pass
+    # Merge back any old species that don't exist in the new dataset
+    new_ids = {e["id"] for e in entries}
+    for old_entry in old_data:
+        if old_entry["id"] not in new_ids:
+            entries.append(old_entry)
 
     # Deduplicate types to ensure consistency (e.g. single ['FIRE'] instead of ['FIRE', 'FIRE'])
     for entry in entries:
