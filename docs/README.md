@@ -15,7 +15,7 @@
 * **Improved Location Logic:** Dynamically parses empty locations with enhanced region detection and name resolution.
 * **Overlay & Z-Order Safety:** Implemented strict overlay handling to ensure UI panels remain correctly populated with relevant information without interfering with unrelated application windows.
 * **Developer-Centric Debugging:** Integrated one-click debug tools that export game window captures with color-coded region slices and OCR output for rapid, visual troubleshooting.
-* **Granular User Control:** Added modular settings, including panel auto-switching, caught-status toggles, and region overrides—decoupled from the UI logic for a cleaner experience. 
+* **Granular User Control:** Added modular settings, including panel auto-switching, caught-status toggles, and region overrides—decoupled from the UI logic for a cleaner experience.
 
 ## Screenshots
 
@@ -56,9 +56,9 @@
   </tr>
 </table>
 
-# ShakeChecker Installation & Setup Guide
+# ShakeChecker EX Installation & Setup Guide
 
-This guide covers how to set up the ShakeChecker application on your system. The process is automated to ensure it runs safely without affecting your core system files or registry.
+This guide covers how to set up the ShakeChecker EX application on your system. The process is automated to ensure it runs safely without affecting your core system files or registry.
 
 ## 1. Initial Setup
 * Ensure you have **Python 3.11 or higher** installed on your computer.
