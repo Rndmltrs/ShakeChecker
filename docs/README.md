@@ -56,9 +56,9 @@
   </tr>
 </table>
 
-# ShakeChecker Installation & Setup Guide
+# ShakeChecker EX Installation & Setup Guide
 
-This guide covers how to set up the ShakeChecker application on your system. The process is automated to ensure it runs safely without affecting your core system files or registry.
+This guide covers how to set up the ShakeChecker EX application on your system. The process is automated to ensure it runs safely without affecting your core system files or registry.
 
 ## 1. Initial Setup
 * Ensure you have **Python 3.11 or higher** installed on your computer.
